@@ -87,7 +87,7 @@ internal class AsmLine
 
         if (match.Success)
         {
-            Label = match.Value;
+            Label = match.Value.Substring(0, match.Value.Length - 1);
             line = line.Substring(match.Length).TrimStart();
         }
 
@@ -102,11 +102,16 @@ internal class AsmLine
     private string GetMnemonic(string line)
     {
         // Mnemonic is 1-5 alphabetic characters
-        Match match = Regex.Match(line, @"^[a-zA-Z]{1,5}");
+        // Pseudo-instruction mnemonics may have a leading period
+        Match match = Regex.Match(line, @"^.?[a-zA-Z]{1,5}");
 
         if (match.Success)
         {
             Mnemonic = match.Value;
+            if (Mnemonic[0] == '.')
+            {
+                Mnemonic = Mnemonic.Substring(1);
+            }
             line = line.Substring(match.Length).TrimStart();
         }
 
@@ -125,7 +130,7 @@ internal class AsmLine
 
         if (match.Success)
         {
-            OperandSize = match.Value;
+            OperandSize = match.Value.Substring(1);
             line = line.Substring(match.Length);
         }
 
