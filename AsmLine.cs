@@ -1,4 +1,5 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.Text;
+using System.Text.RegularExpressions;
 
 namespace im8000asm;
 
@@ -6,17 +7,25 @@ internal class AsmLine
 {
     public AsmLine(string rawLine, int lineNumber)
     {
+        HasContent = true;
         LineNumber = lineNumber;
         Operands = [];
 
         string line = rawLine;
         line = StripComments(line);
+        if (string.IsNullOrWhiteSpace(line))
+        {
+            HasContent = false;
+            return;
+        }
+
         line = GetLabel(line);
         line = GetMnemonic(line);
         line = GetOperandSize(line);
         GetOperands(line);
     }
 
+    public bool HasContent { get; set; }
     public int LineNumber { get; set; }
     public string? Label { get; set; }
     public Constants.Mnemonic? Mnemonic { get; set; }
@@ -25,7 +34,35 @@ internal class AsmLine
 
     public override string ToString()
     {
-        return $"[{LineNumber:0000}] {Label} {Mnemonic} {OperandSize} {string.Join(',', Operands)}";
+        var sb = new StringBuilder();
+
+        sb.Append(LineNumber.ToString("0000"));
+        sb.Append(' ');
+
+        if (Label is not null)
+        {
+            sb.Append(Label);
+            sb.Append(": ");
+        }
+        else
+        {
+            sb.Append('\t');
+        }
+
+        if (Mnemonic is not null)
+        {
+            sb.Append(Mnemonic);
+            if (OperandSize is not null && OperandSize != Constants.OperandSize.Implied)
+            {
+                sb.Append('.');
+                sb.Append(OperandSize.ToString().AsSpan(0, 1));
+            }
+            sb.Append(' ');
+
+            sb.Append(string.Join(',', Operands));
+        }
+
+        return sb.ToString();
     }
 
     /// <summary>
@@ -88,10 +125,10 @@ internal class AsmLine
         if (match.Success)
         {
             Label = match.Value.Substring(0, match.Value.Length - 1);
-            line = line.Substring(match.Length).TrimStart();
+            line = line.Substring(match.Length);
         }
 
-        return line;
+        return line.TrimStart();
     }
 
     /// <summary>
@@ -120,10 +157,10 @@ internal class AsmLine
 
             Mnemonic = result;
 
-            line = line.Substring(match.Length).TrimStart();
+            line = line.Substring(match.Length);
         }
 
-        return line;
+        return line.TrimStart();
     }
 
     /// <summary>
@@ -151,12 +188,12 @@ internal class AsmLine
 
             line = line.Substring(match.Length);
         }
-        else
+        else if (Mnemonic is not null)
         {
             OperandSize = Constants.OperandSize.Implied;
         }
 
-        return line;
+        return line.TrimStart();
     }
 
     /// <summary>
