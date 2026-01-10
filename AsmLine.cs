@@ -19,13 +19,13 @@ internal class AsmLine
 
     public int LineNumber { get; set; }
     public string? Label { get; set; }
-    public string? Mnemonic { get; set; }
-    public string? OperandSize { get; set; }
+    public Constants.Mnemonic? Mnemonic { get; set; }
+    public Constants.OperandSize? OperandSize { get; set; }
     public string[] Operands { get; set; }
 
     public override string ToString()
     {
-        return $"[{LineNumber:0000}] {Label} {Mnemonic}{OperandSize} {string.Join(',', Operands)}";
+        return $"[{LineNumber:0000}] {Label} {Mnemonic} {OperandSize} {string.Join(',', Operands)}";
     }
 
     /// <summary>
@@ -103,15 +103,23 @@ internal class AsmLine
     {
         // Mnemonic is 1-5 alphabetic characters
         // Pseudo-instruction mnemonics may have a leading period
-        Match match = Regex.Match(line, @"^.?[a-zA-Z]{1,5}");
+        Match match = Regex.Match(line, @"^\.?[a-zA-Z]{1,5}");
 
         if (match.Success)
         {
-            Mnemonic = match.Value;
-            if (Mnemonic[0] == '.')
+            string mnemonic = match.Value.ToUpperInvariant();
+            if (mnemonic[0] == '.')
             {
-                Mnemonic = Mnemonic.Substring(1);
+                mnemonic = mnemonic.Substring(1);
             }
+
+            if (!Enum.TryParse(mnemonic, out Constants.Mnemonic result))
+            {
+                throw new Exception($"Unknown mnemonic: {mnemonic}");
+            }
+
+            Mnemonic = result;
+
             line = line.Substring(match.Length).TrimStart();
         }
 
@@ -125,13 +133,27 @@ internal class AsmLine
     /// <returns>Assembly line with size stripped</returns>
     private string GetOperandSize(string line)
     {
-        // Mnemonic is 1-5 alphabetic characters
-        Match match = Regex.Match(line, @"^\.[BWD]");
+        // Operand size is a period followed by B, W, or D
+        // Match wider to fail early and loud
+        Match match = Regex.Match(line, @"^\.[a-zA-Z]");
 
         if (match.Success)
         {
-            OperandSize = match.Value.Substring(1);
+            string size = match.Value.Substring(1).ToUpperInvariant();
+
+            OperandSize = size switch
+            {
+                "B" => Constants.OperandSize.Byte,
+                "W" => Constants.OperandSize.Word,
+                "D" => Constants.OperandSize.DWord,
+                _ => throw new Exception($"Unknown size: {size}")
+            };
+
             line = line.Substring(match.Length);
+        }
+        else
+        {
+            OperandSize = Constants.OperandSize.Implied;
         }
 
         return line;
