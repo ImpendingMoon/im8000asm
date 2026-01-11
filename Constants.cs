@@ -9,6 +9,8 @@ internal static class Constants
         I, R,
     }
 
+    public static string[] RegisterTargetNames { get; } = Enum.GetNames<RegisterTarget>();
+
     public enum OperandSize
     {
         Implied,
@@ -114,5 +116,18 @@ internal static class Constants
         DS,     // Define Space
         EQU,    // Equals
         ORG,    // Org
+    }
+
+    public enum TokenType
+    {
+        Number,
+        Identifier,
+        Plus,
+        Minus,
+        Star,
+        Slash,
+        LParen,
+        RParen,
+        End,
     }
 }

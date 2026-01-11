@@ -17,20 +17,28 @@ internal class Program
             "\tLD.W H, A",
             "\tDJNZ fib_loop",
             "",
-            "JR.W $"
+            "\tJR.W $",
+            "\tLD A, (0x1234ABCD)",
+            "\tADD (IX+2), B",
+            "\tLD (label+2), HL"
         ];
 
-        var parsed = new List<AsmLine>();
+        var lexed = new List<LexedLine>();
 
         for (int i = 0; i < source.Length; i++)
         {
-            var asmLine = new AsmLine(source[i], i + 1);
-            parsed.Add(asmLine);
+            var asmLine = new LexedLine(source[i], i + 1);
+            lexed.Add(asmLine);
         }
 
-        foreach (AsmLine asmLine in parsed)
+        foreach (LexedLine asmLine in lexed)
         {
             Console.WriteLine(asmLine);
+
+            if (asmLine.Mnemonic is not null)
+            {
+                var instruction = new ParsedInstruction(asmLine);
+            }
         }
     }
 }

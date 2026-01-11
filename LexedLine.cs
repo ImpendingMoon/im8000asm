@@ -3,9 +3,9 @@ using System.Text.RegularExpressions;
 
 namespace im8000asm;
 
-internal class AsmLine
+internal class LexedLine
 {
-    public AsmLine(string rawLine, int lineNumber)
+    public LexedLine(string rawLine, int lineNumber)
     {
         HasContent = true;
         LineNumber = lineNumber;
@@ -28,8 +28,8 @@ internal class AsmLine
     public bool HasContent { get; set; }
     public int LineNumber { get; set; }
     public string? Label { get; set; }
-    public Constants.Mnemonic? Mnemonic { get; set; }
-    public Constants.OperandSize? OperandSize { get; set; }
+    public string? Mnemonic { get; set; }
+    public string? OperandSize { get; set; }
     public string[] Operands { get; set; }
 
     public override string ToString()
@@ -52,10 +52,10 @@ internal class AsmLine
         if (Mnemonic is not null)
         {
             sb.Append(Mnemonic);
-            if (OperandSize is not null && OperandSize != Constants.OperandSize.Implied)
+            if (OperandSize is not null && OperandSize is not null)
             {
                 sb.Append('.');
-                sb.Append(OperandSize.ToString().AsSpan(0, 1));
+                sb.Append(OperandSize[0]);
             }
             sb.Append(' ');
 
@@ -106,7 +106,7 @@ internal class AsmLine
 
         if (splitAt != -1)
         {
-            return line.Substring(0, splitAt);
+            return line[..splitAt];
         }
 
         return line;
@@ -124,8 +124,8 @@ internal class AsmLine
 
         if (match.Success)
         {
-            Label = match.Value.Substring(0, match.Value.Length - 1);
-            line = line.Substring(match.Length);
+            Label = match.Value[..^1];
+            line = line[match.Length..];
         }
 
         return line.TrimStart();
@@ -147,17 +147,12 @@ internal class AsmLine
             string mnemonic = match.Value.ToUpperInvariant();
             if (mnemonic[0] == '.')
             {
-                mnemonic = mnemonic.Substring(1);
+                mnemonic = mnemonic[1..];
             }
 
-            if (!Enum.TryParse(mnemonic, out Constants.Mnemonic result))
-            {
-                throw new Exception($"Unknown mnemonic: {mnemonic}");
-            }
+            Mnemonic = mnemonic;
 
-            Mnemonic = result;
-
-            line = line.Substring(match.Length);
+            line = line[match.Length..];
         }
 
         return line.TrimStart();
@@ -176,21 +171,9 @@ internal class AsmLine
 
         if (match.Success)
         {
-            string size = match.Value.Substring(1).ToUpperInvariant();
-
-            OperandSize = size switch
-            {
-                "B" => Constants.OperandSize.Byte,
-                "W" => Constants.OperandSize.Word,
-                "D" => Constants.OperandSize.DWord,
-                _ => throw new Exception($"Unknown size: {size}")
-            };
-
-            line = line.Substring(match.Length);
-        }
-        else if (Mnemonic is not null)
-        {
-            OperandSize = Constants.OperandSize.Implied;
+            string size = match.Value[1..].ToUpperInvariant();
+            OperandSize = size;
+            line = line[match.Length..];
         }
 
         return line.TrimStart();
