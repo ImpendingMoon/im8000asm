@@ -20,7 +20,8 @@ internal class Program
             "\tJR.W $",
             "\tLD A, (0x1234ABCD)",
             "\tADD (IX+2), B",
-            "\tLD (label+2), HL"
+            "\tLD (label+2), HL",
+            "\tLDIR",
         ];
 
         var lexed = new List<LexedLine>();

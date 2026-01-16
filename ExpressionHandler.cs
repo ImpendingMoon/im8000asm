@@ -15,7 +15,21 @@ internal class ExpressionHandler
 
     private Expression ParseExpression()
     {
-        return ParseAddSub();
+        return ParseBitwise();
+    }
+
+    private Expression ParseBitwise()
+    {
+        Expression left = ParseAddSub();
+
+        while (Match(Constants.TokenType.Ampersand, Constants.TokenType.Pipe, Constants.TokenType.Caret))
+        {
+            char operation = _tokens[_position - 1].Text[0];
+            Expression right = ParseAddSub();
+            left = new BinaryExpression(operation, left, right);
+        }
+
+        return left;
     }
 
     private Expression ParseAddSub()
@@ -48,7 +62,7 @@ internal class ExpressionHandler
 
     private Expression ParseUnary()
     {
-        if (Match(Constants.TokenType.Plus, Constants.TokenType.Minus))
+        if (Match(Constants.TokenType.Plus, Constants.TokenType.Minus, Constants.TokenType.Tilde))
         {
             return new UnaryExpression(_tokens[_position - 1].Text, ParseUnary());
         }
@@ -172,6 +186,10 @@ internal class ExpressionHandler
                 '-' => new Token(Constants.TokenType.Minus, "-"),
                 '*' => new Token(Constants.TokenType.Star, "*"),
                 '/' => new Token(Constants.TokenType.Slash, "/"),
+                '&' => new Token(Constants.TokenType.Ampersand, "&"),
+                '|' => new Token(Constants.TokenType.Pipe, "|"),
+                '^' => new Token(Constants.TokenType.Caret, "^"),
+                '~' => new Token(Constants.TokenType.Tilde, "~"),
                 '(' => new Token(Constants.TokenType.LParen, "("),
                 ')' => new Token(Constants.TokenType.RParen, ")"),
                 _ => throw new Exception($"Unexpected character '{c}' in expression")
