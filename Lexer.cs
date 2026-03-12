@@ -43,7 +43,7 @@ public class Lexer
 
 	public List<Token> Tokenize()
 	{
-		List<Token> tokens = new();
+		List<Token> tokens = [];
 		Token token;
 		do
 		{
@@ -161,12 +161,12 @@ public class Lexer
 		int numberBase = 10;
 
 		// Prefixes
-		if (numberPart.StartsWith("$"))
+		if (numberPart.StartsWith('$'))
 		{
 			numberBase = 16;
 			numberPart = numberPart[1..];
 		}
-		else if (numberPart.StartsWith("%"))
+		else if (numberPart.StartsWith('%'))
 		{
 			numberBase = 2;
 			numberPart = numberPart[1..];

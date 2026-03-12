@@ -143,22 +143,14 @@ public static class ExpressionEvaluator
 		List<Diagnostic> diagnostics
 	)
 	{
-		long Eval(ExpressionNode node)
+
+		return Eval(expr);
+
+		long ResolveSymbol(SymbolReferenceNode symbol)
 		{
-			return node switch
-			{
-				NumberLiteralNode n => n.Value,
-				CurrentAddressNode => currentAddress,
-				SymbolReferenceNode s => ResolveSymbol(s),
-				UnaryExpressionNode u => u.Operator switch
-				{
-					'-' => -Eval(u.Operand),
-					'~' => ~Eval(u.Operand),
-					_ => Eval(u.Operand),
-				},
-				BinaryExpressionNode b => EvalBinary(b),
-				_ => AddError(node.Line, node.Column, $"Unknown expression node '{node.GetType().Name}'", diagnostics),
-			};
+			return symbols.TryGetValue(symbol.Name, out uint value)
+				? value
+				: AddError(symbol.Line, symbol.Column, $"Undefined symbol '{symbol.Name}'", diagnostics);
 		}
 
 		long EvalBinary(BinaryExpressionNode b)
@@ -181,14 +173,23 @@ public static class ExpressionEvaluator
 			};
 		}
 
-		long ResolveSymbol(SymbolReferenceNode symbol)
+		long Eval(ExpressionNode node)
 		{
-			return symbols.TryGetValue(symbol.Name, out uint value)
-				? value
-				: AddError(symbol.Line, symbol.Column, $"Undefined symbol '{symbol.Name}'", diagnostics);
+			return node switch
+			{
+				NumberLiteralNode n => n.Value,
+				CurrentAddressNode => currentAddress,
+				SymbolReferenceNode s => ResolveSymbol(s),
+				UnaryExpressionNode u => u.Operator switch
+				{
+					'-' => -Eval(u.Operand),
+					'~' => ~Eval(u.Operand),
+					_ => Eval(u.Operand),
+				},
+				BinaryExpressionNode b => EvalBinary(b),
+				_ => AddError(node.Line, node.Column, $"Unknown expression node '{node.GetType().Name}'", diagnostics),
+			};
 		}
-
-		return Eval(expr);
 	}
 
 	private static long AddError(int line, int column, string message, List<Diagnostic> diagnostics)
