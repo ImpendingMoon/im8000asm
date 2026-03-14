@@ -109,7 +109,7 @@ public static class ExpressionParser
 
 	private static ExpressionNode ParseParenExpression(List<Token> tokens, ref int pos, Token open)
 	{
-		ExpressionNode inner = ParseAddSub(tokens, ref pos);
+		ExpressionNode inner = ParseBitwise(tokens, ref pos);
 		if (Peek(tokens, pos).Kind != TokenKind.RightParen)
 		{
 			throw new AssemblyException(open.Line, open.Column, "Expected ')' to close sub-expression");
@@ -133,7 +133,7 @@ public static class ExpressionEvaluator
 {
 	public static long Evaluate(
 		ExpressionNode expr,
-		IReadOnlyDictionary<string, uint> symbols,
+		IReadOnlyDictionary<string, long> symbols,
 		uint currentAddress,
 		List<Diagnostic> diagnostics
 	)
@@ -143,7 +143,7 @@ public static class ExpressionEvaluator
 
 		long ResolveSymbol(SymbolReferenceNode symbol)
 		{
-			return symbols.TryGetValue(symbol.Name, out uint value)
+			return symbols.TryGetValue(symbol.Name, out long value)
 				? value
 				: AddError(symbol.Line, symbol.Column, $"Undefined symbol '{symbol.Name}'", diagnostics);
 		}

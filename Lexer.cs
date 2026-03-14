@@ -157,10 +157,18 @@ public class Lexer
 
 		if (numberPart.Length == 0)
 		{
-			throw new AssemblyException(_line, _column, "Expected value in number literal");
+			throw new AssemblyException(startLine, startColumn, "Expected value in number literal");
 		}
 
-		ulong value = Convert.ToUInt64(numberPart, numberBase);
+		ulong value;
+		try
+		{
+			value = Convert.ToUInt64(numberPart, numberBase);
+		}
+		catch (Exception ex) when (ex is OverflowException or FormatException)
+		{
+			throw new AssemblyException(startLine, startColumn, $"Invalid number literal '{raw}': {ex.Message}");
+		}
 
 		return new Token(TokenKind.Number, raw, value, startLine, startColumn);
 	}

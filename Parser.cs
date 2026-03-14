@@ -271,8 +271,7 @@ public class Parser
 	{
 		Token token = CurrentToken();
 
-		(string name, _) = SplitMnemonicText(token.Text);
-		if (!Registers.TryParseWide(name, out WideRegister register))
+		if (!Registers.TryParseWide(token.Text.ToUpperInvariant(), out WideRegister register))
 		{
 			ExpressionNode address = ExpressionParser.Parse(_tokens, ref _position);
 			Expect(TokenKind.RightBracket);
@@ -372,7 +371,7 @@ public class Parser
 
 	private void SkipNewLines()
 	{
-		while (!AtEnd() && CurrentToken().Kind == TokenKind.NewLine)
+		while (CurrentToken().Kind == TokenKind.NewLine)
 		{
 			Advance();
 		}

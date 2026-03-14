@@ -162,7 +162,7 @@ internal static class Program
 		Dictionary<int, ListingRecord> byLine = new();
 		foreach (ListingRecord record in result.Listing)
 		{
-			byLine.TryAdd(record.SourceLine, record);
+			byLine[record.SourceLine] = record;
 		}
 
 		const int bytesPerRow = 4;
@@ -211,14 +211,15 @@ internal static class Program
 		return sb.ToString();
 	}
 
-	private static string BuildSymbolText(IReadOnlyDictionary<string, uint> symbolTable)
+	private static string BuildSymbolText(IReadOnlyDictionary<string, long> symbolTable)
 	{
 		var sb = new StringBuilder();
-		foreach ((string name, uint address) in symbolTable.OrderBy(kv => kv.Value))
+		foreach ((string name, long value) in symbolTable.OrderBy(kv => kv.Value))
 		{
-			string addrStr = $"{address:X8}";
-			string addrFormatted = addrStr[..4] + "_" + addrStr[4..];
-			sb.AppendLine($"{addrFormatted}  {name}");
+			string formatted = value is >= 0 and <= 0xFFFFFFFFL
+				? $"{(uint)value:X8}"[..4] + "_" + $"{(uint)value:X8}"[4..]
+				: value.ToString();
+			sb.AppendLine($"{formatted}  {name}");
 		}
 
 		return sb.ToString();

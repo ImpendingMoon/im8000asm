@@ -4,12 +4,15 @@ public record ListingRecord(uint Address, int ByteOffset, int ByteCount, int Sou
 
 public record AssembledOutput(
 	byte[] Bytes,
-	IReadOnlyDictionary<string, uint> SymbolTable,
+	IReadOnlyDictionary<string, long> SymbolTable,
 	IReadOnlyList<Diagnostic> Diagnostics,
 	IReadOnlyList<ListingRecord> Listing
 );
 
-public record MemoryResolution(byte RegisterCode, long Displacement, bool HasDisplacement);
+public record MemoryResolution(byte RegisterCode, long Immediate, OperandSize? ImmediateSize)
+{
+	public bool HasImmediate => ImmediateSize is not null;
+}
 
 public record BranchTargetResolution(byte AddressCode, long AppendedValue, bool HasAppended);
 
@@ -29,7 +32,7 @@ public class CodeGenerator
 	private readonly List<ListingRecord> listing = [];
 	private readonly List<byte> output = [];
 	private readonly List<ParsedStatement> statements;
-	private readonly Dictionary<string, uint> symbols = new();
+	private readonly Dictionary<string, long> symbols = new();
 
 	private uint initialOrigin;
 	private uint origin;
@@ -190,7 +193,7 @@ public class CodeGenerator
 			return;
 		}
 
-		symbols[directive.LabelName] = (uint)EvaluateOperand(directive.Operands[0]);
+		symbols[directive.LabelName] = EvaluateOperand(directive.Operands[0]);
 	}
 
 	private void PassTwo()
@@ -383,9 +386,9 @@ public class CodeGenerator
 		EmitWord(word);
 		programCounter += 2;
 
-		if (memory.HasDisplacement)
+		if (memory.HasImmediate)
 		{
-			EmitImmediate(memory.Displacement, OperandSize.Word, instruction.Line, instruction.Column);
+			EmitImmediate(memory.Immediate, memory.ImmediateSize!.Value, instruction.Line, instruction.Column);
 		}
 
 		if (registerCode == (byte)NarrowRegister.Immediate)
@@ -458,9 +461,9 @@ public class CodeGenerator
 		EmitWord(word);
 		programCounter += 2;
 
-		if (memory.HasDisplacement)
+		if (memory.HasImmediate)
 		{
-			EmitImmediate(memory.Displacement, OperandSize.Word, instruction.Line, instruction.Column);
+			EmitImmediate(memory.Immediate, memory.ImmediateSize!.Value, instruction.Line, instruction.Column);
 		}
 	}
 
@@ -553,11 +556,11 @@ public class CodeGenerator
 		if (target is IndirectOperand or IndexedOperand)
 		{
 			MemoryResolution memory = ResolveMemoryOperand(target, line, column, instructionAddress);
-			return new BranchTargetResolution(memory.RegisterCode, memory.Displacement, memory.HasDisplacement);
+			return new BranchTargetResolution(memory.RegisterCode, memory.Immediate, memory.HasImmediate);
 		}
 
-		long address = target is DirectMemoryOperand
-			? ResolveMemoryOperand(target, line, column, instructionAddress).Displacement
+		long address = target is DirectMemoryOperand directMemory
+			? ExpressionEvaluator.Evaluate(directMemory.Address, symbols, instructionAddress, diagnostics)
 			: ExpressionEvaluator.Evaluate(ExtractExpression(target), symbols, instructionAddress, diagnostics);
 
 		return new BranchTargetResolution((byte)WideRegister.DirectOrImmediate, address, true);
@@ -664,7 +667,7 @@ public class CodeGenerator
 		switch (operand)
 		{
 			case IndirectOperand indirect:
-				return new MemoryResolution((byte)indirect.Register, 0, false);
+				return new MemoryResolution((byte)indirect.Register, 0, null);
 
 			case IndexedOperand indexed:
 				long indexedDisplacement = ExpressionEvaluator.Evaluate(
@@ -673,7 +676,7 @@ public class CodeGenerator
 					instructionAddress,
 					diagnostics
 				);
-				return new MemoryResolution((byte)indexed.Register, indexedDisplacement, true);
+				return new MemoryResolution((byte)indexed.Register, indexedDisplacement, OperandSize.Word);
 
 			case DirectMemoryOperand directMemory:
 				long directAddress = ExpressionEvaluator.Evaluate(
@@ -682,7 +685,7 @@ public class CodeGenerator
 					instructionAddress,
 					diagnostics
 				);
-				return new MemoryResolution((byte)WideRegister.DirectOrImmediate, directAddress, true);
+				return new MemoryResolution((byte)WideRegister.DirectOrImmediate, directAddress, OperandSize.Dword);
 
 			default:
 				throw new AssemblyException(line, column, $"Expected memory operand, got {operand.GetType().Name}");
@@ -691,14 +694,24 @@ public class CodeGenerator
 
 	private static InstructionVariant? MatchVariant(InstructionDefinition definition, InstructionStatement instruction)
 	{
-		// Prefer size-constrained variants when the instruction has an explicit size suffix,
-		// then fall back to unconstrained variants.
-		foreach (InstructionVariant variant in definition.Variants.OrderByDescending(v => v.RequiredSizes is not null))
+		// First pass: prefer size-constrained variants when the instruction has an explicit size suffix.
+		if (instruction.Size is not null)
 		{
-			bool sizeOk = variant.RequiredSizes is null ||
-				(instruction.Size is not null && Array.Exists(variant.RequiredSizes, s => s == instruction.Size));
+			foreach (InstructionVariant variant in definition.Variants)
+			{
+				if (variant.RequiredSizes is not null &&
+					Array.Exists(variant.RequiredSizes, s => s == instruction.Size) &&
+					OperandsMatch(variant, instruction))
+				{
+					return variant;
+				}
+			}
+		}
 
-			if (sizeOk && OperandsMatch(variant, instruction))
+		// Second pass: unconstrained variants.
+		foreach (InstructionVariant variant in definition.Variants)
+		{
+			if (variant.RequiredSizes is null && OperandsMatch(variant, instruction))
 			{
 				return variant;
 			}
@@ -770,7 +783,12 @@ public class CodeGenerator
 			return instruction.Size == OperandSize.Byte ? 1 : 2;
 		}
 
-		return target is IndirectOperand ? 0 : 4;
+		return target switch
+		{
+			IndirectOperand => 0,
+			IndexedOperand => 2,
+			_ => 4,
+		};
 	}
 
 	private static int AppendedBytesFormatUm(InstructionStatement instruction)
@@ -847,7 +865,8 @@ public class CodeGenerator
 
 		ParsedOperand lastOperand = instruction.Operands[^1];
 		bool isImmediate = lastOperand is ImmediateOrRegisterOperand expression &&
-			!IsNarrowRegisterExpression(expression);
+			!IsNarrowRegisterExpression(expression) &&
+			!IsWideRegisterExpression(expression);
 
 		return isImmediate ? ImmediateByteCount(size) : 0;
 	}
@@ -870,6 +889,14 @@ public class CodeGenerator
 				if (directive.Operands.Length == 1)
 				{
 					uint newOrigin = (uint)EvaluateOperand(directive.Operands[0]);
+					if (newOrigin < programCounter)
+					{
+						throw new AssemblyException(
+							directive.Line,
+							directive.Column,
+							$"ORG 0x{newOrigin:X} is before current address 0x{programCounter:X}"
+						);
+					}
 					while (programCounter < newOrigin)
 					{
 						EmitByte(0x00);
@@ -892,7 +919,7 @@ public class CodeGenerator
 					}
 					else
 					{
-						EmitByte((byte)(EvaluateOperand(operand) & 0xFF));
+						EmitByte((byte)EvaluateOperand(operand));
 						programCounter++;
 					}
 				}
@@ -901,7 +928,7 @@ public class CodeGenerator
 			case Directive.DW:
 				foreach (ParsedOperand operand in directive.Operands)
 				{
-					EmitWord((ushort)(EvaluateOperand(operand) & 0xFFFF));
+					EmitWord((ushort)EvaluateOperand(operand));
 					programCounter += 2;
 				}
 				break;
@@ -909,7 +936,7 @@ public class CodeGenerator
 			case Directive.DD:
 				foreach (ParsedOperand operand in directive.Operands)
 				{
-					EmitDword((uint)(EvaluateOperand(operand) & 0xFFFFFFFF));
+					EmitDword((uint)EvaluateOperand(operand));
 					programCounter += 4;
 				}
 				break;
@@ -1087,12 +1114,7 @@ public class CodeGenerator
 					return (byte)wide;
 				}
 
-				immediateValue = ExpressionEvaluator.Evaluate(
-					new SymbolReferenceNode(symbol.Name, symbol.Line, symbol.Column),
-					symbols,
-					instructionAddress,
-					diagnostics
-				);
+				immediateValue = ExpressionEvaluator.Evaluate(symbol, symbols, instructionAddress, diagnostics);
 				return (byte)NarrowRegister.Immediate;
 
 			case ImmediateOrRegisterOperand expression:
