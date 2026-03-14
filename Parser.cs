@@ -41,12 +41,52 @@ public record DirectiveStatement(
 public class Parser
 {
 	private readonly List<Token> _tokens;
+	private string _currentScope = string.Empty;
 	private string _pendingLabel = string.Empty;
 	private int _position;
 
 	public Parser(List<Token> tokens)
 	{
 		_tokens = tokens;
+	}
+
+	private static bool IsLocalLabel(string text) => text.StartsWith('.');
+
+	private string QualifyLocalLabel(string name, int line, int column)
+	{
+		if (_currentScope.Length == 0)
+		{
+			throw new AssemblyException(line, column, $"Local label '{name}' has no enclosing non-local label");
+		}
+		return $"{_currentScope}.{name[1..].ToUpperInvariant()}";
+	}
+
+	private ExpressionNode QualifyLocalReferences(ExpressionNode node)
+	{
+		return node switch
+		{
+			SymbolReferenceNode sym when sym.Name.StartsWith('.') =>
+				new SymbolReferenceNode(QualifyLocalLabel(sym.Name, sym.Line, sym.Column), sym.Line, sym.Column),
+			UnaryExpressionNode u =>
+				u with { Operand = QualifyLocalReferences(u.Operand) },
+			BinaryExpressionNode b =>
+				b with { Left = QualifyLocalReferences(b.Left), Right = QualifyLocalReferences(b.Right) },
+			_ => node,
+		};
+	}
+
+	private ParsedOperand QualifyLocalReferencesInOperand(ParsedOperand operand)
+	{
+		return operand switch
+		{
+			ImmediateOrRegisterOperand imm =>
+				imm with { Expression = QualifyLocalReferences(imm.Expression) },
+			DirectMemoryOperand mem =>
+				mem with { Address = QualifyLocalReferences(mem.Address) },
+			IndexedOperand idx =>
+				idx with { Displacement = QualifyLocalReferences(idx.Displacement) },
+			_ => operand,
+		};
 	}
 
 	public List<ParsedStatement> Parse()
@@ -77,7 +117,17 @@ public class Parser
 		// Label
 		if (token.Kind == TokenKind.Identifier && PeekToken().Kind == TokenKind.Colon)
 		{
-			_pendingLabel = token.Text.ToUpperInvariant();
+			string rawName = token.Text;
+			string resolvedName = IsLocalLabel(rawName)
+				? QualifyLocalLabel(rawName, token.Line, token.Column)
+				: rawName.ToUpperInvariant();
+
+			if (!IsLocalLabel(rawName))
+			{
+				_currentScope = resolvedName;
+			}
+
+			_pendingLabel = resolvedName;
 			Advance(2); // consume label and colon
 			yield return new LabelStatement(_pendingLabel, token.Line, token.Column);
 
@@ -142,7 +192,7 @@ public class Parser
 			list.Add(ParseOperand(mnemonic, directive));
 		}
 
-		return list.ToArray();
+		return list.Select(QualifyLocalReferencesInOperand).ToArray();
 	}
 
 	private ParsedOperand ParseOperand(Mnemonic? mnemonic = null, Directive? directive = null)
