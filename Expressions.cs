@@ -11,13 +11,8 @@ public record SymbolReferenceNode(string Name, int Line, int Column) : Expressio
 public record UnaryExpressionNode(char Operator, ExpressionNode Operand, int Line, int Column)
 	: ExpressionNode(Line, Column);
 
-public record BinaryExpressionNode(
-	string Operator,
-	ExpressionNode Left,
-	ExpressionNode Right,
-	int Line,
-	int Column
-) : ExpressionNode(Line, Column);
+public record BinaryExpressionNode(string Operator, ExpressionNode Left, ExpressionNode Right, int Line, int Column)
+	: ExpressionNode(Line, Column);
 
 public static class ExpressionParser
 {

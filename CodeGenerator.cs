@@ -129,6 +129,23 @@ public class CodeGenerator
 				}
 				break;
 
+			case Directive.ALIGN:
+				if (directive.Operands.Length >= 1)
+				{
+					long alignment = EvaluateOperand(directive.Operands[0]);
+					if (alignment < 1)
+					{
+						throw new AssemblyException(
+							directive.Line,
+							directive.Column,
+							$"ALIGN: alignment value must be at least 1, got {alignment}"
+						);
+					}
+					uint padding = (uint)((alignment - (programCounter % alignment)) % alignment);
+					programCounter += padding;
+				}
+				break;
+
 			case Directive.EQU:
 				HandleEquDirective(directive);
 				break;
@@ -623,6 +640,15 @@ public class CodeGenerator
 	{
 		OperandSize size = ResolveSize(instruction);
 
+		if (size == OperandSize.Dword)
+		{
+			throw new AssemblyException(
+				instruction.Line,
+				instruction.Column,
+				$"'{instruction.Mnemonic}': block instructions support only byte (.B) and word (.W) sizes"
+			);
+		}
+
 		ushort word = BlkBaseBits;
 		word |= (ushort)(variant.Opcode << 4);
 		word |= (ushort)((int)size << 8);
@@ -883,6 +909,26 @@ public class CodeGenerator
 				{
 					EmitByte(fillByte);
 					programCounter++;
+				}
+				break;
+
+			case Directive.ALIGN:
+				if (directive.Operands.Length >= 1)
+				{
+					long alignment = EvaluateOperand(directive.Operands[0]);
+					if (alignment < 1)
+					{
+						break;
+					}
+					byte alignFill = directive.Operands.Length >= 2
+						? (byte)(EvaluateOperand(directive.Operands[1]) & 0xFF)
+						: (byte)0;
+					uint padding = (uint)((alignment - (programCounter % alignment)) % alignment);
+					for (uint i = 0; i < padding; i++)
+					{
+						EmitByte(alignFill);
+						programCounter++;
+					}
 				}
 				break;
 

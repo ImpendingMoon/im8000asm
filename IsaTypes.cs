@@ -76,6 +76,7 @@ public enum Directive
 	DEFS,
 	INCLUDE,
 	INCBIN,
+	ALIGN,
 }
 
 public enum Mnemonic
