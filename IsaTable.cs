@@ -81,7 +81,8 @@ public static class IsaTable
 		LdSpecialInstruction(),
 		SB(nameof(Mnemonic.NOP), 0x0),
 		SB(nameof(Mnemonic.DJNZ), 0x1, true),
-		SB(nameof(Mnemonic.JANZ), 0x2, true)
+		SB(nameof(Mnemonic.JANZ), 0x2, true),
+		SB(nameof(Mnemonic.JAZ), 0x3, true)
 	);
 
 	private static InstructionVariant RVariant(byte opcode)

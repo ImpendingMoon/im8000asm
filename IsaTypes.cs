@@ -100,7 +100,7 @@ public enum Mnemonic
 	DAA, RLD, RRD,
 	HALT, EI, DI, IM,
 
-	NOP, DJNZ, JANZ,
+	NOP, DJNZ, JANZ, JAZ,
 }
 
 public enum InstructionFormat
