@@ -50,7 +50,10 @@ public class Parser
 		_tokens = tokens;
 	}
 
-	private static bool IsLocalLabel(string text) => text.StartsWith('.');
+	private static bool IsLocalLabel(string text)
+	{
+		return text.StartsWith('.');
+	}
 
 	private string QualifyLocalLabel(string name, int line, int column)
 	{
@@ -65,12 +68,20 @@ public class Parser
 	{
 		return node switch
 		{
-			SymbolReferenceNode sym when sym.Name.StartsWith('.') =>
-				new SymbolReferenceNode(QualifyLocalLabel(sym.Name, sym.Line, sym.Column), sym.Line, sym.Column),
-			UnaryExpressionNode u =>
-				u with { Operand = QualifyLocalReferences(u.Operand) },
-			BinaryExpressionNode b =>
-				b with { Left = QualifyLocalReferences(b.Left), Right = QualifyLocalReferences(b.Right) },
+			SymbolReferenceNode sym when sym.Name.StartsWith('.') => new SymbolReferenceNode(
+				QualifyLocalLabel(sym.Name, sym.Line, sym.Column),
+				sym.Line,
+				sym.Column
+			),
+			UnaryExpressionNode u => u with
+			{
+				Operand = QualifyLocalReferences(u.Operand),
+			},
+			BinaryExpressionNode b => b with
+			{
+				Left = QualifyLocalReferences(b.Left),
+				Right = QualifyLocalReferences(b.Right),
+			},
 			_ => node,
 		};
 	}
@@ -79,12 +90,18 @@ public class Parser
 	{
 		return operand switch
 		{
-			ImmediateOrRegisterOperand imm =>
-				imm with { Expression = QualifyLocalReferences(imm.Expression) },
-			DirectMemoryOperand mem =>
-				mem with { Address = QualifyLocalReferences(mem.Address) },
-			IndexedOperand idx =>
-				idx with { Displacement = QualifyLocalReferences(idx.Displacement) },
+			ImmediateOrRegisterOperand imm => imm with
+			{
+				Expression = QualifyLocalReferences(imm.Expression),
+			},
+			DirectMemoryOperand mem => mem with
+			{
+				Address = QualifyLocalReferences(mem.Address),
+			},
+			IndexedOperand idx => idx with
+			{
+				Displacement = QualifyLocalReferences(idx.Displacement),
+			},
 			_ => operand,
 		};
 	}
