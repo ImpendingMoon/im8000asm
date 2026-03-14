@@ -163,7 +163,6 @@ public class Parser
 
 		(string name, OperandSize? size) = SplitMnemonicText(token.Text);
 
-		// Directive
 		if (Keywords.TryParseDirective(name, out Directive directive))
 		{
 			Advance();
@@ -173,7 +172,6 @@ public class Parser
 			yield break;
 		}
 
-		// Mnemonic
 		if (!Keywords.TryParseMnemonic(name, out Mnemonic mnemonic))
 		{
 			throw new AssemblyException(token.Line, token.Column, $"Unknown mnemonic or directive '{token.Text}'");
@@ -225,7 +223,7 @@ public class Parser
 			return new StringLiteralOperand(token.Text);
 		}
 
-		// Alternate registers (e.g., A', HL')
+		// Alternate registers
 		if (token.Kind == TokenKind.Identifier && token.Text.EndsWith('\''))
 		{
 			Advance();
@@ -241,7 +239,6 @@ public class Parser
 			throw new AssemblyException(token.Line, token.Column, $"'{token.Text}' is not a valid alternate register");
 		}
 
-		// Branch condition operand
 		if (mnemonic.HasValue &&
 			Keywords.BranchMnemonics.Contains(mnemonic.Value) &&
 			token.Kind == TokenKind.Identifier &&
@@ -316,13 +313,22 @@ public class Parser
 		{
 			text = text[1..];
 		}
+
 		int dotIndex = text.LastIndexOf('.');
 		if (dotIndex < 0)
 		{
 			return (text.ToUpperInvariant(), null);
 		}
 
+		string baseName = text[..dotIndex].ToUpperInvariant();
 		string suffix = text[(dotIndex + 1)..].ToUpperInvariant();
+
+		bool baseIsMnemonic = Keywords.TryParseMnemonic(baseName, out _);
+		if (!baseIsMnemonic)
+		{
+			return (text.ToUpperInvariant(), null);
+		}
+
 		OperandSize? size = suffix switch
 		{
 			"B" => OperandSize.Byte,
@@ -331,13 +337,12 @@ public class Parser
 			_ => null,
 		};
 
-		// If the parts after a '.' aren't a size, treat as single identifier
 		if (size is null)
 		{
 			return (text.ToUpperInvariant(), null);
 		}
 
-		return (text[..dotIndex].ToUpperInvariant(), size);
+		return (baseName, size);
 	}
 
 	private Token CurrentToken()

@@ -2,14 +2,6 @@ namespace im8000asm;
 
 public static class Keywords
 {
-	// Size-suffix keywords that are reserved and cannot be used as labels.
-	public static readonly IReadOnlySet<string> SizeSuffixNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-	{
-		"B",
-		"W",
-		"D",
-	};
-
 	// Directives whose operand lists may contain quoted string literals.
 	public static readonly IReadOnlySet<Directive> StringAcceptingDirectives = new HashSet<Directive>
 	{

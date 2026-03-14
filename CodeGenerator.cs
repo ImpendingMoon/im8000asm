@@ -176,17 +176,7 @@ public class CodeGenerator
 	{
 		if (!directive.HasLabel)
 		{
-			Warn(directive.Line, directive.Column, ".EQU has no label — directive ignored");
-			return;
-		}
-
-		if (ReservedNames.Contains(directive.LabelName))
-		{
-			Warn(
-				directive.Line,
-				directive.Column,
-				$"'{directive.LabelName}' is a reserved name and cannot be used as an EQU symbol"
-			);
+			Warn(directive.Line, directive.Column, ".EQU has no label - directive ignored");
 			return;
 		}
 
@@ -195,7 +185,7 @@ public class CodeGenerator
 			Warn(
 				directive.Line,
 				directive.Column,
-				$".EQU for '{directive.LabelName}' has no value — directive ignored"
+				$".EQU for '{directive.LabelName}' has no value - directive ignored"
 			);
 			return;
 		}
@@ -1205,7 +1195,6 @@ public class CodeGenerator
 		names.UnionWith(IsaTable.Instructions.Keys);
 		names.UnionWith(Registers.ByNarrowName.Keys);
 		names.UnionWith(Registers.ByWideName.Keys);
-		names.UnionWith(Keywords.SizeSuffixNames);
 		return names;
 	}
 

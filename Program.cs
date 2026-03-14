@@ -159,8 +159,6 @@ internal static class Program
 
 	private static string BuildListingText(SourceLine[] sourceMap, AssembledOutput result)
 	{
-		// Build a map from source line number -> listing record.
-		// A single source line may produce multiple records (e.g. multi-value DB), so we keep the first.
 		Dictionary<int, ListingRecord> byLine = new();
 		foreach (ListingRecord record in result.Listing)
 		{
@@ -181,7 +179,6 @@ internal static class Program
 				continue;
 			}
 
-			// First row: address + up to bytesPerRow bytes + source text
 			ReadOnlySpan<byte> allBytes = result.Bytes.AsSpan(record.ByteOffset, record.ByteCount);
 			int rows = ((record.ByteCount + bytesPerRow) - 1) / bytesPerRow;
 
@@ -238,38 +235,14 @@ internal static class Program
 		string label = severity == DiagnosticSeverity.Error ? "error" : "warning";
 		TextWriter output = severity == DiagnosticSeverity.Error ? Console.Error : Console.Out;
 
-		bool lineInRange = line > 0 && line <= sourceMap.Length;
-		if (lineInRange)
+		if (line > 0 && line <= sourceMap.Length)
 		{
 			SourceLine sourceLine = sourceMap[line - 1];
 			output.WriteLine($"{sourceLine.File}:{sourceLine.FileLineNumber}:{column}: {label}: {message}");
-			output.WriteLine($" {sourceLine.Text}");
-
-			string prefix = sourceLine.Text.Length >= column ? sourceLine.Text[..column] : "";
-			string expanded = ExpandTabs(prefix);
-			output.WriteLine($"{expanded}^");
 		}
 		else
 		{
 			output.WriteLine($"{label}: {message}");
 		}
-	}
-
-	private static string ExpandTabs(string text, int tabWidth = 4)
-	{
-		var builder = new StringBuilder();
-		foreach (char character in text)
-		{
-			if (character == '\t')
-			{
-				int spaces = tabWidth - (builder.Length % tabWidth);
-				builder.Append(' ', spaces);
-			}
-			else
-			{
-				builder.Append(' ');
-			}
-		}
-		return builder.ToString();
 	}
 }

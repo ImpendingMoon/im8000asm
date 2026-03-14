@@ -92,7 +92,7 @@ public class Lexer
 		}
 
 		// Numbers
-		if (current == '$' || current == '%' || char.IsDigit(current))
+		if (char.IsDigit(current))
 		{
 			return ReadNumber(startLine, startColumn);
 		}
@@ -109,7 +109,6 @@ public class Lexer
 			return ReadString(startLine, startColumn);
 		}
 
-		// Unknown: fallback as identifier
 		Advance();
 		return new Token(TokenKind.Identifier, current.ToString(), 0, startLine, startColumn);
 	}
@@ -118,61 +117,12 @@ public class Lexer
 	{
 		int start = _position;
 
-		// Consume optional leading '.' (local label prefix)
-		if (CurrentChar() == '.')
+		while (_position < _source.Length && (char.IsLetterOrDigit(CurrentChar()) || CurrentChar() is '_' or '.'))
 		{
 			Advance();
 		}
 
-		// Consume the base name segment
-		while (_position < _source.Length && (char.IsLetterOrDigit(CurrentChar()) || CurrentChar() == '_'))
-		{
-			Advance();
-		}
-
-		// Consume additional '.label' chunks to support qualified names
-		while (_position < _source.Length && CurrentChar() == '.')
-		{
-			int nextPos = _position + 1;
-			if (nextPos >= _source.Length)
-			{
-				break;
-			}
-
-			char firstOfSegment = _source[nextPos];
-			if (!char.IsLetter(firstOfSegment) && firstOfSegment != '_')
-			{
-				break; // not an identifier segment
-			}
-
-			// Measure the full segment length
-			int segStart = nextPos;
-			int segEnd = segStart;
-			while (segEnd < _source.Length && (char.IsLetterOrDigit(_source[segEnd]) || _source[segEnd] == '_'))
-			{
-				segEnd++;
-			}
-
-			string segment = _source[segStart..segEnd];
-
-			// If the segment is exactly a size suffix identifier and is followed by a
-			// non-identifier character, treat it as the size suffix and stop.
-			bool isSizeSuffix = segment.Length == 1 &&
-				"bwdBWD".Contains(segment[0]) &&
-				(segEnd >= _source.Length || (!char.IsLetterOrDigit(_source[segEnd]) && _source[segEnd] != '_'));
-
-			if (isSizeSuffix)
-			{
-				// Consume the dot + size letter as the size suffix and stop.
-				Advance(1 + segment.Length);
-				break;
-			}
-
-			// Otherwise consume the dot + segment as part of the qualified name.
-			Advance(1 + segment.Length);
-		}
-
-		// alternate-register suffix: '
+		// Alternate register suffix
 		if (_position < _source.Length && CurrentChar() == '\'')
 		{
 			Advance();
@@ -185,29 +135,16 @@ public class Lexer
 	{
 		int start = _position;
 
-		// Consume all number characters
-		while (_position < _source.Length &&
-			(char.IsLetterOrDigit(CurrentChar()) || CurrentChar() is '_' or '$' or '%' or '.'))
+		while (_position < _source.Length && (char.IsLetterOrDigit(CurrentChar()) || CurrentChar() == '_'))
 		{
 			Advance();
 		}
 
-		string raw = _source[start.._position].Replace("_", ""); // remove underscores
+		string raw = _source[start.._position].Replace("_", "");
 		string numberPart = raw;
 		int numberBase = 10;
 
-		// Prefixes
-		if (numberPart.StartsWith('$'))
-		{
-			numberBase = 16;
-			numberPart = numberPart[1..];
-		}
-		else if (numberPart.StartsWith('%'))
-		{
-			numberBase = 2;
-			numberPart = numberPart[1..];
-		}
-		else if (numberPart.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+		if (numberPart.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
 		{
 			numberBase = 16;
 			numberPart = numberPart[2..];
@@ -218,19 +155,12 @@ public class Lexer
 			numberPart = numberPart[2..];
 		}
 
-		// Suffixes
-		if (numberPart.EndsWith("h", StringComparison.OrdinalIgnoreCase))
+		if (numberPart.Length == 0)
 		{
-			numberBase = 16;
-			numberPart = numberPart[..^1];
-		}
-		else if (numberPart.EndsWith("b", StringComparison.OrdinalIgnoreCase))
-		{
-			numberBase = 2;
-			numberPart = numberPart[..^1];
+			throw new AssemblyException(_line, _column, "Expected value in number literal");
 		}
 
-		ulong value = numberPart.Length > 0 ? Convert.ToUInt64(numberPart, numberBase) : 0;
+		ulong value = Convert.ToUInt64(numberPart, numberBase);
 
 		return new Token(TokenKind.Number, raw, value, startLine, startColumn);
 	}
@@ -320,6 +250,8 @@ public class Lexer
 			'-' => TokenKind.Minus,
 			'*' => TokenKind.Star,
 			'/' => TokenKind.Slash,
+			'%' => TokenKind.Percent,
+			'$' => TokenKind.Dollar,
 			'&' => TokenKind.Ampersand,
 			'^' => TokenKind.Caret,
 			'|' => TokenKind.Pipe,
