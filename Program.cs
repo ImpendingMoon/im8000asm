@@ -12,12 +12,16 @@ internal static class Program
 
 		if (args.Length < 1)
 		{
-			Console.Error.WriteLine("Usage: assembler <input.asm> [-o <output.bin>] [-E]");
+			Console.Error.WriteLine(
+				"Usage: assembler <input.asm> [-o <output.bin>] [-l [<output.lst>]] [-s [<output.sym>]] [-E]"
+			);
 			return 1;
 		}
 
 		string inputPath = args[0];
 		string outputPath = "a.bin";
+		string? listingPath = null;
+		string? symbolPath = null;
 		bool preprocessOnly = false;
 
 		for (int index = 1; index < args.Length; index++)
@@ -25,6 +29,18 @@ internal static class Program
 			if (args[index] == "-o" && (index + 1) < args.Length)
 			{
 				outputPath = args[++index];
+			}
+			else if (args[index] == "-l")
+			{
+				listingPath = (index + 1) < args.Length && !args[index + 1].StartsWith('-')
+					? args[++index]
+					: Path.ChangeExtension(outputPath, ".lst");
+			}
+			else if (args[index] == "-s")
+			{
+				symbolPath = (index + 1) < args.Length && !args[index + 1].StartsWith('-')
+					? args[++index]
+					: Path.ChangeExtension(outputPath, ".sym");
 			}
 			else if (args[index] == "-E")
 			{
@@ -89,19 +105,126 @@ internal static class Program
 			return 1;
 		}
 
-		File.WriteAllBytes(outputPath, result.Bytes);
 		stopwatch.Stop();
+
+		if (!TryWriteAllBytes(outputPath, result.Bytes))
+		{
+			return 1;
+		}
 
 		Console.WriteLine(
 			$"Assembled {result.Bytes.Length} bytes into \"{outputPath}\" in {stopwatch.ElapsedMilliseconds / 1000f} seconds"
 		);
-		Console.WriteLine($"Symbols ({result.SymbolTable.Count}):");
-		foreach ((string name, uint address) in result.SymbolTable)
+
+		if (listingPath is not null && TryWriteAllText(listingPath, BuildListingText(sourceMap, result)))
 		{
-			Console.WriteLine($"\t{name,-20} = {address:X4}h");
+			Console.WriteLine($"Listing written to \"{listingPath}\"");
+		}
+
+		if (symbolPath is not null && TryWriteAllText(symbolPath, BuildSymbolText(result.SymbolTable)))
+		{
+			Console.WriteLine($"Symbol table written to \"{symbolPath}\"");
 		}
 
 		return 0;
+	}
+
+	private static bool TryWriteAllBytes(string path, byte[] bytes)
+	{
+		try
+		{
+			File.WriteAllBytes(path, bytes);
+			return true;
+		}
+		catch (IOException ex)
+		{
+			Console.Error.WriteLine($"error: {ex.Message}");
+			return false;
+		}
+	}
+
+	private static bool TryWriteAllText(string path, string text)
+	{
+		try
+		{
+			File.WriteAllText(path, text);
+			return true;
+		}
+		catch (IOException ex)
+		{
+			Console.Error.WriteLine($"error: {ex.Message}");
+			return false;
+		}
+	}
+
+	private static string BuildListingText(SourceLine[] sourceMap, AssembledOutput result)
+	{
+		// Build a map from source line number -> listing record.
+		// A single source line may produce multiple records (e.g. multi-value DB), so we keep the first.
+		Dictionary<int, ListingRecord> byLine = new();
+		foreach (ListingRecord record in result.Listing)
+		{
+			byLine.TryAdd(record.SourceLine, record);
+		}
+
+		const int bytesPerRow = 4;
+		var sb = new StringBuilder();
+
+		for (int lineIndex = 0; lineIndex < sourceMap.Length; lineIndex++)
+		{
+			int lineNumber = lineIndex + 1;
+			SourceLine sourceLine = sourceMap[lineIndex];
+
+			if (!byLine.TryGetValue(lineNumber, out ListingRecord? record) || record.ByteCount == 0)
+			{
+				sb.AppendLine($"              {lineNumber,5}  {sourceLine.Text}");
+				continue;
+			}
+
+			// First row: address + up to bytesPerRow bytes + source text
+			ReadOnlySpan<byte> allBytes = result.Bytes.AsSpan(record.ByteOffset, record.ByteCount);
+			int rows = ((record.ByteCount + bytesPerRow) - 1) / bytesPerRow;
+
+			for (int row = 0; row < rows; row++)
+			{
+				int rowOffset = row * bytesPerRow;
+				ReadOnlySpan<byte> rowBytes = allBytes.Slice(
+					rowOffset,
+					Math.Min(bytesPerRow, record.ByteCount - rowOffset)
+				);
+
+				uint rowAddress = record.Address + (uint)rowOffset;
+				string addrStr = $"{rowAddress:X8}";
+				string addrFormatted = addrStr[..4] + "_" + addrStr[4..];
+
+				string hex = string.Join(" ", rowBytes.ToArray().Select(b => $"{b:X2}"));
+				string hexPadded = hex.PadRight((bytesPerRow * 3) - 1);
+
+				if (row == 0)
+				{
+					sb.AppendLine($"{addrFormatted}  {hexPadded}  {lineNumber,5}  {sourceLine.Text}");
+				}
+				else
+				{
+					sb.AppendLine($"{addrFormatted}  {hexPadded}");
+				}
+			}
+		}
+
+		return sb.ToString();
+	}
+
+	private static string BuildSymbolText(IReadOnlyDictionary<string, uint> symbolTable)
+	{
+		var sb = new StringBuilder();
+		foreach ((string name, uint address) in symbolTable.OrderBy(kv => kv.Value))
+		{
+			string addrStr = $"{address:X8}";
+			string addrFormatted = addrStr[..4] + "_" + addrStr[4..];
+			sb.AppendLine($"{addrFormatted}  {name}");
+		}
+
+		return sb.ToString();
 	}
 
 	private static void PrintDiagnostic(

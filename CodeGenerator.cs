@@ -1,9 +1,12 @@
 namespace im8000asm;
 
+public record ListingRecord(uint Address, int ByteOffset, int ByteCount, int SourceLine);
+
 public record AssembledOutput(
 	byte[] Bytes,
 	IReadOnlyDictionary<string, uint> SymbolTable,
-	IReadOnlyList<Diagnostic> Diagnostics
+	IReadOnlyList<Diagnostic> Diagnostics,
+	IReadOnlyList<ListingRecord> Listing
 );
 
 public record MemoryResolution(byte RegisterCode, long Displacement, bool HasDisplacement);
@@ -23,6 +26,7 @@ public class CodeGenerator
 	private static readonly HashSet<string> ReservedNames = BuildReservedNames();
 
 	private readonly List<Diagnostic> diagnostics = [];
+	private readonly List<ListingRecord> listing = [];
 	private readonly List<byte> output = [];
 	private readonly List<ParsedStatement> statements;
 	private readonly Dictionary<string, uint> symbols = new();
@@ -51,7 +55,7 @@ public class CodeGenerator
 			);
 		}
 
-		return new AssembledOutput(output.ToArray(), symbols, diagnostics);
+		return new AssembledOutput(output.ToArray(), symbols, diagnostics, listing);
 	}
 
 	private void PassOne()
@@ -205,6 +209,9 @@ public class CodeGenerator
 
 		foreach (ParsedStatement statement in statements)
 		{
+			uint addressBefore = programCounter;
+			int offsetBefore = output.Count;
+
 			switch (statement)
 			{
 				case DirectiveStatement directive:
@@ -215,6 +222,8 @@ public class CodeGenerator
 					EmitInstruction(instruction);
 					break;
 			}
+
+			listing.Add(new ListingRecord(addressBefore, offsetBefore, output.Count - offsetBefore, statement.Line));
 		}
 	}
 
@@ -918,7 +927,7 @@ public class CodeGenerator
 					long alignment = EvaluateOperand(directive.Operands[0]);
 					if (alignment < 1)
 					{
-						break;
+						break; // already reported in pass one
 					}
 					byte alignFill = directive.Operands.Length >= 2
 						? (byte)(EvaluateOperand(directive.Operands[1]) & 0xFF)
