@@ -331,6 +331,12 @@ public class Parser
 			_ => null,
 		};
 
+		// If the parts after a '.' aren't a size, treat as single identifier
+		if (size is null)
+		{
+			return (text.ToUpperInvariant(), null);
+		}
+
 		return (text[..dotIndex].ToUpperInvariant(), size);
 	}
 

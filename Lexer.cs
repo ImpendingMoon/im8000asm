@@ -118,28 +118,64 @@ public class Lexer
 	{
 		int start = _position;
 
+		// Consume optional leading '.' (local label prefix)
 		if (CurrentChar() == '.')
 		{
 			Advance();
 		}
 
+		// Consume the base name segment
 		while (_position < _source.Length && (char.IsLetterOrDigit(CurrentChar()) || CurrentChar() == '_'))
 		{
 			Advance();
 		}
 
-		// Optional suffixes: ' or .B/.W/.D
-		if (_position < _source.Length)
+		// Consume additional '.label' chunks to support qualified names
+		while (_position < _source.Length && CurrentChar() == '.')
 		{
-			char c = CurrentChar();
-			if (c == '\'')
+			int nextPos = _position + 1;
+			if (nextPos >= _source.Length)
 			{
-				Advance();
+				break;
 			}
-			else if (c == '.' && (_position + 1) < _source.Length && "BbWwDd".Contains(_source[_position + 1]))
+
+			char firstOfSegment = _source[nextPos];
+			if (!char.IsLetter(firstOfSegment) && firstOfSegment != '_')
 			{
-				Advance(2);
+				break; // not an identifier segment
 			}
+
+			// Measure the full segment length
+			int segStart = nextPos;
+			int segEnd = segStart;
+			while (segEnd < _source.Length && (char.IsLetterOrDigit(_source[segEnd]) || _source[segEnd] == '_'))
+			{
+				segEnd++;
+			}
+
+			string segment = _source[segStart..segEnd];
+
+			// If the segment is exactly a size suffix identifier and is followed by a
+			// non-identifier character, treat it as the size suffix and stop.
+			bool isSizeSuffix = segment.Length == 1 &&
+				"bwdBWD".Contains(segment[0]) &&
+				(segEnd >= _source.Length || (!char.IsLetterOrDigit(_source[segEnd]) && _source[segEnd] != '_'));
+
+			if (isSizeSuffix)
+			{
+				// Consume the dot + size letter as the size suffix and stop.
+				Advance(1 + segment.Length);
+				break;
+			}
+
+			// Otherwise consume the dot + segment as part of the qualified name.
+			Advance(1 + segment.Length);
+		}
+
+		// alternate-register suffix: '
+		if (_position < _source.Length && CurrentChar() == '\'')
+		{
+			Advance();
 		}
 
 		return new Token(TokenKind.Identifier, _source[start.._position], 0, startLine, startColumn);

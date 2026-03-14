@@ -299,7 +299,7 @@ public class CodeGenerator
 
 		if (instruction.Size is not null)
 		{
-			if (hasWideRegisterOperand && instruction.Size == OperandSize.Dword)
+			if (hasWideRegisterOperand && instruction.Size != OperandSize.Dword)
 			{
 				throw new AssemblyException(
 					instruction.Line,
@@ -395,7 +395,7 @@ public class CodeGenerator
 
 		if (memory.HasDisplacement)
 		{
-			EmitImmediate(memory.Displacement, OperandSize.Dword, instruction.Line, instruction.Column);
+			EmitImmediate(memory.Displacement, OperandSize.Word, instruction.Line, instruction.Column);
 		}
 
 		if (registerCode == (byte)NarrowRegister.Immediate)
@@ -470,7 +470,7 @@ public class CodeGenerator
 
 		if (memory.HasDisplacement)
 		{
-			EmitImmediate(memory.Displacement, OperandSize.Dword, instruction.Line, instruction.Column);
+			EmitImmediate(memory.Displacement, OperandSize.Word, instruction.Line, instruction.Column);
 		}
 	}
 
