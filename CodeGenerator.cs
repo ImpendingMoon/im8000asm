@@ -775,9 +775,22 @@ public class CodeGenerator
 
 	private static int AppendedBytesFormatUm(InstructionStatement instruction)
 	{
-		return instruction.Operands.Length > 0 && instruction.Operands[0] is IndexedOperand or DirectMemoryOperand
-			? 4
-			: 0;
+		if (instruction.Operands.Length == 0)
+		{
+			return 0;
+		}
+
+		if (instruction.Operands[0] is IndexedOperand)
+		{
+			return 2;
+		}
+
+		if (instruction.Operands[0] is DirectMemoryOperand)
+		{
+			return 4;
+		}
+
+		return 0;
 	}
 
 	private static int AppendedBytesFormatRm(InstructionStatement instruction, OperandSize size)
@@ -798,7 +811,11 @@ public class CodeGenerator
 			memoryOperand = null;
 		}
 
-		if (memoryOperand is IndexedOperand or DirectMemoryOperand)
+		if (memoryOperand is IndexedOperand)
+		{
+			total += 2;
+		}
+		else if (memoryOperand is DirectMemoryOperand)
 		{
 			total += 4;
 		}
