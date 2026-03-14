@@ -37,6 +37,12 @@ public static class OperandDescriptors
 
 	public static readonly OperandDescriptor ImmediateOnly = Modes(AddressingMode.Immediate);
 
+	public static readonly OperandDescriptor IndirectOrIndexedImmediate = Modes(
+		AddressingMode.Indirect,
+		AddressingMode.Indexed,
+		AddressingMode.Immediate
+	);
+
 	public static readonly OperandDescriptor Condition = Modes(AddressingMode.Condition);
 
 	public static readonly OperandDescriptor SpecialRegisterOnly = Modes(AddressingMode.SpecialRegister);

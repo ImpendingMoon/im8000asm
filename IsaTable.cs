@@ -96,7 +96,7 @@ public static class IsaTable
 			new InstructionVariant(InstructionFormat.FormatRm, opcode, [AnyRegister, Memory]),
 			new InstructionVariant(InstructionFormat.FormatRm, opcode, [AnyRegister, MemoryOrImmediate]),
 			new InstructionVariant(InstructionFormat.FormatRm, opcode, [Memory, AnyRegister]),
-			new InstructionVariant(InstructionFormat.FormatRm, opcode, [Memory, ImmediateOnly]),
+			new InstructionVariant(InstructionFormat.FormatRm, opcode, [IndirectOrIndexedImmediate, ImmediateOnly]),
 		];
 	}
 
