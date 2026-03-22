@@ -150,6 +150,28 @@ public class CodeGenerator
 				}
 				break;
 
+			case Directive.RB:
+			case Directive.RS:
+				if (directive.Operands.Length >= 1)
+				{
+					programCounter += (uint)EvaluateOperand(directive.Operands[0]);
+				}
+				break;
+
+			case Directive.RW:
+				if (directive.Operands.Length >= 1)
+				{
+					programCounter += (uint)EvaluateOperand(directive.Operands[0]) * 2;
+				}
+				break;
+
+			case Directive.RD:
+				if (directive.Operands.Length >= 1)
+				{
+					programCounter += (uint)EvaluateOperand(directive.Operands[0]) * 4;
+				}
+				break;
+
 			case Directive.EQU:
 				HandleEquDirective(directive);
 				break;
@@ -850,11 +872,6 @@ public class CodeGenerator
 							$"ORG 0x{newOrigin:X} is before current address 0x{programCounter:X}"
 						);
 					}
-					while (programCounter < newOrigin)
-					{
-						EmitByte(0x00);
-						programCounter++;
-					}
 					programCounter = newOrigin;
 				}
 				break;
@@ -930,6 +947,28 @@ public class CodeGenerator
 
 			case Directive.EQU:
 				break; // handled in pass one
+
+			case Directive.RB:
+			case Directive.RS:
+				if (directive.Operands.Length >= 1)
+				{
+					programCounter += (uint)EvaluateOperand(directive.Operands[0]);
+				}
+				break;
+
+			case Directive.RW:
+				if (directive.Operands.Length >= 1)
+				{
+					programCounter += (uint)EvaluateOperand(directive.Operands[0]) * 2;
+				}
+				break;
+
+			case Directive.RD:
+				if (directive.Operands.Length >= 1)
+				{
+					programCounter += (uint)EvaluateOperand(directive.Operands[0]) * 4;
+				}
+				break;
 
 			case Directive.INCBIN:
 				if (directive.Operands.Length == 1 && directive.Operands[0] is StringLiteralOperand pathOperand)

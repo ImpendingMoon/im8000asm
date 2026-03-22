@@ -77,6 +77,10 @@ public enum Directive
 	INCLUDE,
 	INCBIN,
 	ALIGN,
+	RB,
+	RW,
+	RD,
+	RS,
 }
 
 public enum Mnemonic
