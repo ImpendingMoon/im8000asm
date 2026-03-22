@@ -125,13 +125,7 @@ public class Parser
 
 	private IEnumerable<ParsedStatement> ParseNextStatements()
 	{
-		Token token = CurrentToken();
-		if (token.Kind == TokenKind.EndOfFile)
-		{
-			yield break;
-		}
-
-		// Label
+		Token token = CurrentToken(); // Label
 		if (token.Kind == TokenKind.Identifier && PeekToken().Kind == TokenKind.Colon)
 		{
 			string rawName = token.Text;
@@ -146,10 +140,11 @@ public class Parser
 
 			_pendingLabel = resolvedName;
 			Advance(2); // consume label and colon
-			yield return new LabelStatement(_pendingLabel, token.Line, token.Column);
+			yield return new LabelStatement(resolvedName, token.Line, token.Column);
 
 			if (AtEndOfLine())
 			{
+				_pendingLabel = "";
 				yield break;
 			}
 			token = CurrentToken();
@@ -271,7 +266,7 @@ public class Parser
 	{
 		Token token = CurrentToken();
 
-		if (!Registers.TryParseWide(token.Text.ToUpperInvariant(), out WideRegister register))
+		if (!Registers.TryParseWide(token.Text, out WideRegister register))
 		{
 			ExpressionNode address = ExpressionParser.Parse(_tokens, ref _position);
 			Expect(TokenKind.RightBracket);

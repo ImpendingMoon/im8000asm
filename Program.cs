@@ -58,7 +58,7 @@ internal static class Program
 
 		try
 		{
-			sourceMap = SourceLoader.Load(inputPath);
+			sourceMap = Preprocessor.Process(inputPath);
 		}
 		catch (AssemblyException exception)
 		{
@@ -90,6 +90,8 @@ internal static class Program
 			return 1;
 		}
 
+		stopwatch.Stop();
+
 		bool hasErrors = false;
 		foreach (Diagnostic diagnostic in result.Diagnostics)
 		{
@@ -104,8 +106,6 @@ internal static class Program
 		{
 			return 1;
 		}
-
-		stopwatch.Stop();
 
 		if (!TryWriteAllBytes(outputPath, result.Bytes))
 		{
@@ -216,9 +216,16 @@ internal static class Program
 		var sb = new StringBuilder();
 		foreach ((string name, long value) in symbolTable.OrderBy(kv => kv.Value))
 		{
-			string formatted = value is >= 0 and <= 0xFFFFFFFFL
-				? $"{(uint)value:X8}"[..4] + "_" + $"{(uint)value:X8}"[4..]
-				: value.ToString();
+			string formatted;
+			if (value is >= 0 and <= 0xFFFFFFFFL)
+			{
+				string hex = $"{(uint)value:X8}";
+				formatted = hex[..4] + "_" + hex[4..];
+			}
+			else
+			{
+				formatted = value.ToString();
+			}
 			sb.AppendLine($"{formatted}  {name}");
 		}
 

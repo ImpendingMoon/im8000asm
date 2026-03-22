@@ -98,7 +98,7 @@ public static class ExpressionParser
 			TokenKind.Number => new NumberLiteralNode((long)token.NumericValue, token.Line, token.Column),
 			TokenKind.Dollar => new CurrentAddressNode(token.Line, token.Column),
 			TokenKind.Identifier => new SymbolReferenceNode(token.Text.ToUpperInvariant(), token.Line, token.Column),
-			TokenKind.LeftParen => ParseParenExpression(tokens, ref pos, token),
+			TokenKind.LeftParen => ParseParenExpression(tokens, ref pos),
 			_ => throw new AssemblyException(
 				token.Line,
 				token.Column,
@@ -107,12 +107,13 @@ public static class ExpressionParser
 		};
 	}
 
-	private static ExpressionNode ParseParenExpression(List<Token> tokens, ref int pos, Token open)
+	private static ExpressionNode ParseParenExpression(List<Token> tokens, ref int pos)
 	{
 		ExpressionNode inner = ParseBitwise(tokens, ref pos);
-		if (Peek(tokens, pos).Kind != TokenKind.RightParen)
+		Token closing = Peek(tokens, pos);
+		if (closing.Kind != TokenKind.RightParen)
 		{
-			throw new AssemblyException(open.Line, open.Column, "Expected ')' to close sub-expression");
+			throw new AssemblyException(closing.Line, closing.Column, "Expected ')' to close sub-expression");
 		}
 		pos++;
 		return inner;
@@ -138,7 +139,6 @@ public static class ExpressionEvaluator
 		List<Diagnostic> diagnostics
 	)
 	{
-
 		return Eval(expr);
 
 		long ResolveSymbol(SymbolReferenceNode symbol)
@@ -164,7 +164,7 @@ public static class ExpressionEvaluator
 				"&" => left & right,
 				"^" => left ^ right,
 				"|" => left | right,
-				_ => AddError(b.Line, b.Column, $"Unknown operator '{b.Operator}'", diagnostics),
+				_ => throw new InvalidOperationException($"Unknown binary operator '{b.Operator}'"),
 			};
 		}
 
@@ -179,10 +179,10 @@ public static class ExpressionEvaluator
 				{
 					'-' => -Eval(u.Operand),
 					'~' => ~Eval(u.Operand),
-					_ => Eval(u.Operand),
+					_ => throw new InvalidOperationException($"Unknown unary operator '{u.Operator}'"),
 				},
 				BinaryExpressionNode b => EvalBinary(b),
-				_ => AddError(node.Line, node.Column, $"Unknown expression node '{node.GetType().Name}'", diagnostics),
+				_ => throw new InvalidOperationException($"Unknown expression node '{node.GetType().Name}'"),
 			};
 		}
 	}

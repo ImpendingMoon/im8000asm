@@ -25,7 +25,7 @@ public class CodeGenerator
 	private const ushort BBaseBits = 0b1010;
 	private const ushort NBaseBits = 0b1110;
 	private const ushort BlkBaseBits = 0b1011;
-	private const ushort SBBaseBits = 0b1111;
+	private const byte SBBaseBits = 0b1111;
 	private static readonly HashSet<string> ReservedNames = BuildReservedNames();
 
 	private readonly List<Diagnostic> diagnostics = [];
@@ -34,8 +34,6 @@ public class CodeGenerator
 	private readonly List<ParsedStatement> statements;
 	private readonly Dictionary<string, long> symbols = new();
 
-	private uint initialOrigin;
-	private uint origin;
 	private uint programCounter;
 
 	public CodeGenerator(List<ParsedStatement> statements)
@@ -63,8 +61,7 @@ public class CodeGenerator
 
 	private void PassOne()
 	{
-		initialOrigin = origin;
-		programCounter = origin;
+		programCounter = 0;
 
 		foreach (ParsedStatement statement in statements)
 		{
@@ -109,7 +106,7 @@ public class CodeGenerator
 			case Directive.ORG:
 				if (directive.Operands.Length == 1)
 				{
-					origin = programCounter = (uint)EvaluateOperand(directive.Operands[0]);
+					programCounter = (uint)EvaluateOperand(directive.Operands[0]);
 				}
 				break;
 
@@ -198,7 +195,7 @@ public class CodeGenerator
 
 	private void PassTwo()
 	{
-		programCounter = initialOrigin;
+		programCounter = 0;
 
 		foreach (ParsedStatement statement in statements)
 		{
@@ -352,14 +349,9 @@ public class CodeGenerator
 
 		long immediateValue = 0;
 		bool registerSideIsImmediate = IsImmediateOperand(registerOperand);
-		bool memorySideIsImmediate = direction == 0 && IsImmediateOperand(memoryOperand);
 
 		byte registerCode;
-		if (memorySideIsImmediate)
-		{
-			registerCode = ResolveRegisterCode(registerOperand, instruction.Line, instruction.Column);
-		}
-		else if (registerSideIsImmediate)
+		if (registerSideIsImmediate)
 		{
 			immediateValue = EvaluateOperand(registerOperand, instructionAddress);
 			registerCode = (byte)NarrowRegister.Immediate;
@@ -416,7 +408,7 @@ public class CodeGenerator
 				_ => throw new AssemblyException(
 					instruction.Line,
 					instruction.Column,
-					"EX r, r' requires an alternate-register operand (e.g. A' or HL')"
+					"EX r, r' requires an alternate-register operand"
 				),
 			};
 
@@ -480,45 +472,31 @@ public class CodeGenerator
 			targetIndex = 1;
 		}
 
-		byte addressCode = 0b000;
-		long appendedValue = 0;
-		bool hasAppended = false;
 		bool isRelative = instruction.Mnemonic is Mnemonic.JR or Mnemonic.CALLR;
+		BranchTargetResolution? resolution = null;
 
 		if (targetIndex < instruction.Operands.Length)
 		{
 			ParsedOperand target = instruction.Operands[targetIndex];
-
-			BranchTargetResolution resolution = isRelative
+			resolution = isRelative
 				? ResolveRelativeBranchTarget(target, instruction, instructionAddress)
 				: ResolveAbsoluteBranchTarget(target, instruction.Line, instruction.Column, instructionAddress);
-
-			addressCode = resolution.AddressCode;
-			appendedValue = resolution.AppendedValue;
-			hasAppended = resolution.HasAppended;
 		}
 
 		ushort word = BBaseBits;
 		word |= (ushort)(variant.Opcode << 4);
 		word |= (ushort)(conditionCode << 9);
-		word |= (ushort)(addressCode << 13);
+		word |= (ushort)((resolution?.AddressCode ?? 0) << 13);
 
 		EmitWord(word);
 		programCounter += 2;
 
-		if (hasAppended)
+		if (resolution?.HasAppended == true)
 		{
-			OperandSize appendSize;
-			if (isRelative)
-			{
-				appendSize = instruction.Size == OperandSize.Byte ? OperandSize.Byte : OperandSize.Word;
-			}
-			else
-			{
-				appendSize = OperandSize.Dword;
-			}
-
-			EmitImmediate(appendedValue, appendSize, instruction.Line, instruction.Column);
+			OperandSize appendSize = isRelative
+				? instruction.Size == OperandSize.Byte ? OperandSize.Byte : OperandSize.Word
+				: OperandSize.Dword;
+			EmitImmediate(resolution.AppendedValue, appendSize, instruction.Line, instruction.Column);
 		}
 	}
 
@@ -559,10 +537,11 @@ public class CodeGenerator
 			return new BranchTargetResolution(memory.RegisterCode, memory.Immediate, memory.HasImmediate);
 		}
 
-		long address = target is DirectMemoryOperand directMemory
-			? ExpressionEvaluator.Evaluate(directMemory.Address, symbols, instructionAddress, diagnostics)
-			: ExpressionEvaluator.Evaluate(ExtractExpression(target), symbols, instructionAddress, diagnostics);
+		ExpressionNode addressExpr = target is DirectMemoryOperand directMemory
+			? directMemory.Address
+			: ExtractExpression(target);
 
+		long address = ExpressionEvaluator.Evaluate(addressExpr, symbols, instructionAddress, diagnostics);
 		return new BranchTargetResolution((byte)WideRegister.DirectOrImmediate, address, true);
 	}
 
@@ -580,9 +559,10 @@ public class CodeGenerator
 		EmitWord(word);
 		programCounter += 2;
 
-		bool isLoadSpecialRegister = instruction.Mnemonic == Mnemonic.LD &&
-			instruction.Operands.Length >= 1 &&
-			instruction.Operands[0] is SpecialRegisterOperand { Register: SpecialRegister.I };
+		bool isLoadIRegister = instruction.Mnemonic == Mnemonic.LD &&
+			instruction.Operands.Length == 2 &&
+			instruction.Operands[0] is SpecialRegisterOperand { Register: SpecialRegister.I } &&
+			instruction.Operands[1] is ImmediateOrRegisterOperand;
 
 		if (instruction.Mnemonic == Mnemonic.RST)
 		{
@@ -593,7 +573,7 @@ public class CodeGenerator
 				instruction.Column
 			);
 		}
-		else if (isLoadSpecialRegister)
+		else if (isLoadIRegister)
 		{
 			EmitImmediate(
 				EvaluateOperand(instruction.Operands[1], programCounter),
@@ -625,7 +605,7 @@ public class CodeGenerator
 	{
 		uint instructionAddress = programCounter;
 
-		byte word = (byte)SBBaseBits;
+		byte word = SBBaseBits;
 		word |= (byte)(variant.Opcode << 4);
 		EmitByte(word);
 		programCounter += 1;
@@ -754,11 +734,12 @@ public class CodeGenerator
 			return 1;
 		}
 
-		bool isLoadSpecialRegister = instruction.Mnemonic == Mnemonic.LD &&
-			instruction.Operands.Length >= 1 &&
-			instruction.Operands[0] is SpecialRegisterOperand { Register: SpecialRegister.I };
+		bool isLoadIRegister = instruction.Mnemonic == Mnemonic.LD &&
+			instruction.Operands.Length == 2 &&
+			instruction.Operands[0] is SpecialRegisterOperand { Register: SpecialRegister.I } &&
+			instruction.Operands[1] is ImmediateOrRegisterOperand;
 
-		return isLoadSpecialRegister ? 4 : 0;
+		return isLoadIRegister ? 4 : 0;
 	}
 
 	private static int AppendedBytesFormatB(InstructionStatement instruction)
@@ -798,36 +779,23 @@ public class CodeGenerator
 			return 0;
 		}
 
-		if (instruction.Operands[0] is IndexedOperand)
+		return instruction.Operands[0] switch
 		{
-			return 2;
-		}
-
-		if (instruction.Operands[0] is DirectMemoryOperand)
-		{
-			return 4;
-		}
-
-		return 0;
+			IndexedOperand => 2,
+			DirectMemoryOperand => 4,
+			_ => 0,
+		};
 	}
 
 	private static int AppendedBytesFormatRm(InstructionStatement instruction, OperandSize size)
 	{
 		int total = 0;
 
-		ParsedOperand? memoryOperand;
-		if (IsMemoryOperand(instruction.Operands[0]))
-		{
-			memoryOperand = instruction.Operands[0];
-		}
-		else if (instruction.Operands.Length > 1 && IsMemoryOperand(instruction.Operands[1]))
-		{
-			memoryOperand = instruction.Operands[1];
-		}
-		else
-		{
-			memoryOperand = null;
-		}
+		bool firstIsMemory = IsMemoryOperand(instruction.Operands[0]);
+		ParsedOperand memoryOperand = firstIsMemory ? instruction.Operands[0] : instruction.Operands[1];
+		ParsedOperand? registerSideOperand = firstIsMemory
+			? instruction.Operands.Length > 1 ? instruction.Operands[1] : null
+			: instruction.Operands[0];
 
 		if (memoryOperand is IndexedOperand)
 		{
@@ -836,16 +804,6 @@ public class CodeGenerator
 		else if (memoryOperand is DirectMemoryOperand)
 		{
 			total += 4;
-		}
-
-		ParsedOperand? registerSideOperand;
-		if (IsMemoryOperand(instruction.Operands[0]))
-		{
-			registerSideOperand = instruction.Operands.Length > 1 ? instruction.Operands[1] : null;
-		}
-		else
-		{
-			registerSideOperand = instruction.Operands[0];
 		}
 
 		if (registerSideOperand is not null && IsImmediateOperand(registerSideOperand))
@@ -863,12 +821,7 @@ public class CodeGenerator
 			return 0;
 		}
 
-		ParsedOperand lastOperand = instruction.Operands[^1];
-		bool isImmediate = lastOperand is ImmediateOrRegisterOperand expression &&
-			!IsNarrowRegisterExpression(expression) &&
-			!IsWideRegisterExpression(expression);
-
-		return isImmediate ? ImmediateByteCount(size) : 0;
+		return IsImmediateOperand(instruction.Operands[^1]) ? ImmediateByteCount(size) : 0;
 	}
 
 	private static int ImmediateByteCount(OperandSize size)
@@ -902,7 +855,7 @@ public class CodeGenerator
 						EmitByte(0x00);
 						programCounter++;
 					}
-					origin = programCounter = newOrigin;
+					programCounter = newOrigin;
 				}
 				break;
 
@@ -1045,7 +998,9 @@ public class CodeGenerator
 			IndexedOperand => AddressingMode.Indexed,
 			DirectMemoryOperand => AddressingMode.DirectMemory,
 			ImmediateOrRegisterOperand expression => ClassifyExpressionOperand(expression),
-			_ => AddressingMode.Immediate,
+			_ => throw new InvalidOperationException(
+				$"Unexpected operand type '{operand.GetType().Name}' in instruction"
+			),
 		};
 	}
 

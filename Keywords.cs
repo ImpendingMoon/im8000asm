@@ -23,8 +23,8 @@ public static class Keywords
 	// Maps interrupt mode number to IM function code byte.
 	private static readonly Dictionary<long, byte> InterruptModeFunctionCodes = new()
 	{
-		[1] = 0x05,
-		[2] = 0x06,
+		[1] = 0x03,
+		[2] = 0x04,
 	};
 
 	public static bool TryParseDirective(string name, out Directive directive)

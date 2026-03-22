@@ -150,23 +150,26 @@ public static class IsaTable
 		return new InstructionDefinition(
 			"LD",
 			[
+				// LD I, nnnn
 				new InstructionVariant(
 					InstructionFormat.FormatN,
 					0x8,
 					[SpecialRegisterOnly, ImmediateOnly],
-					FunctionCode: 0x07
+					FunctionCode: 0x05
 				),
+				// LD R, A
 				new InstructionVariant(
 					InstructionFormat.FormatN,
 					0x8,
 					[SpecialRegisterOnly, NarrowRegisterOnly],
-					FunctionCode: 0x08
+					FunctionCode: 0x06
 				),
+				// LD A, R
 				new InstructionVariant(
 					InstructionFormat.FormatN,
 					0x8,
 					[NarrowRegisterOnly, SpecialRegisterOnly],
-					FunctionCode: 0x09
+					FunctionCode: 0x07
 				),
 			]
 		);

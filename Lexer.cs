@@ -140,7 +140,8 @@ public class Lexer
 			Advance();
 		}
 
-		string raw = _source[start.._position].Replace("_", "");
+		string original = _source[start.._position];
+		string raw = original.Replace("_", "");
 		string numberPart = raw;
 		int numberBase = 10;
 
@@ -167,10 +168,10 @@ public class Lexer
 		}
 		catch (Exception ex) when (ex is OverflowException or FormatException)
 		{
-			throw new AssemblyException(startLine, startColumn, $"Invalid number literal '{raw}': {ex.Message}");
+			throw new AssemblyException(startLine, startColumn, $"Invalid number literal '{original}': {ex.Message}");
 		}
 
-		return new Token(TokenKind.Number, raw, value, startLine, startColumn);
+		return new Token(TokenKind.Number, original, value, startLine, startColumn);
 	}
 
 	private Token ReadString(int startLine, int startColumn)
@@ -182,10 +183,11 @@ public class Lexer
 			Advance();
 		}
 		string content = _source[start.._position];
-		if (_position < _source.Length && CurrentChar() == '"')
+		if (_position >= _source.Length || CurrentChar() != '"')
 		{
-			Advance(); // skip closing quote
+			throw new AssemblyException(startLine, startColumn, "Unterminated string literal");
 		}
+		Advance(); // skip closing quote
 		return new Token(TokenKind.StringLiteral, content, 0, startLine, startColumn);
 	}
 
@@ -220,11 +222,11 @@ public class Lexer
 	{
 		if (CurrentChar() == '\r')
 		{
-			Advance();
+			_position++;
 		}
 		if (_position < _source.Length && CurrentChar() == '\n')
 		{
-			Advance();
+			_position++;
 		}
 		_line++;
 		_column = 1;
@@ -266,8 +268,8 @@ public class Lexer
 			'~' => TokenKind.Tilde,
 			'[' => TokenKind.LeftBracket,
 			']' => TokenKind.RightBracket,
-			_ => (TokenKind)(-1),
+			_ => TokenKind.EndOfFile,
 		};
-		return kind != (TokenKind)(-1);
+		return kind != TokenKind.EndOfFile;
 	}
 }
