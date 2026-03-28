@@ -81,6 +81,8 @@ public enum Directive
 	RW,
 	RD,
 	RS,
+	STRUCT,
+	ENDSTRUCT,
 }
 
 public enum Mnemonic

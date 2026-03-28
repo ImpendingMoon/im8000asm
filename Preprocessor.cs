@@ -25,18 +25,6 @@ public static class Preprocessor
 		RegexOptions.IgnoreCase
 	);
 
-	private static readonly Regex StructDefPattern = new(
-		"""^\s*\.?STRUCT\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:;.*)?$""",
-		RegexOptions.IgnoreCase
-	);
-
-	private static readonly Regex EndStructPattern = new("""^\s*\.?ENDSTRUCT\s*(?:;.*)?$""", RegexOptions.IgnoreCase);
-
-	private static readonly Regex StructMemberPattern = new(
-		"""^\s*\.([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(\d+)\s*(?:;.*)?$""",
-		RegexOptions.IgnoreCase
-	);
-
 	public static SourceLine[] Process(string rootPath)
 	{
 		string fullPath = Path.GetFullPath(rootPath);
@@ -149,14 +137,6 @@ public static class Preprocessor
 				continue;
 			}
 
-			Match structDefMatch = StructDefPattern.Match(line);
-			if (structDefMatch.Success)
-			{
-				string structName = structDefMatch.Groups[1].Value;
-				EmitStructEqus(lines, ref i, structName, sourceFile, lineNumber, result);
-				continue;
-			}
-
 			Match incbinMatch = IncbinPattern.Match(line);
 			if (incbinMatch.Success)
 			{
@@ -240,58 +220,6 @@ public static class Preprocessor
 
 			result.Add(new SourceLine(expanded, macro.SourceFile, macro.SourceLine));
 		}
-	}
-
-	private static void EmitStructEqus(
-		string[] lines,
-		ref int i,
-		string structName,
-		string sourceFile,
-		int structStartLine,
-		List<SourceLine> result
-	)
-	{
-
-		result.Add(new SourceLine($"{structName}: EQU 0", sourceFile, structStartLine));
-
-		long offset = 0;
-
-		while (i < lines.Length)
-		{
-			string memberLine = lines[i];
-			int memberLineNumber = i + 1;
-			i++;
-
-			if (EndStructPattern.IsMatch(memberLine))
-			{
-				result.Add(new SourceLine($"{structName}._size: EQU {offset}", sourceFile, structStartLine));
-				return;
-			}
-
-			if (string.IsNullOrWhiteSpace(memberLine) || memberLine.TrimStart().StartsWith(';'))
-			{
-				continue;
-			}
-
-			Match memberMatch = StructMemberPattern.Match(memberLine);
-			if (!memberMatch.Success)
-			{
-				throw new AssemblyException(
-					memberLineNumber,
-					0,
-					$"Invalid struct member in '{structName}': expected '.name: <size>', got '{memberLine.Trim()}'"
-				);
-			}
-
-			string memberName = memberMatch.Groups[1].Value;
-			long memberSize = long.Parse(memberMatch.Groups[2].Value);
-
-			result.Add(new SourceLine($"{structName}.{memberName}: EQU {offset}", sourceFile, structStartLine));
-
-			offset += memberSize;
-		}
-
-		throw new AssemblyException(structStartLine, 0, "Unterminated STRUCT definition (missing ENDSTRUCT)");
 	}
 
 	private static string[] SplitCommaList(string raw)

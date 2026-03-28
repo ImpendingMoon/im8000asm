@@ -163,6 +163,21 @@ public class Parser
 			Advance();
 			string labelForDirective = _pendingLabel;
 			_pendingLabel = "";
+
+			if (directive == Directive.STRUCT)
+			{
+				foreach (ParsedStatement s in ParseStructDefinition(token.Line, token.Column))
+				{
+					yield return s;
+				}
+				yield break;
+			}
+
+			if (directive == Directive.ENDSTRUCT)
+			{
+				throw new AssemblyException(token.Line, token.Column, "ENDSTRUCT without matching STRUCT");
+			}
+
 			yield return ParseDirectiveStatement(directive, token.Line, token.Column, labelForDirective);
 			yield break;
 		}
@@ -176,6 +191,121 @@ public class Parser
 		Advance();
 		ParsedOperand[] operands = ParseOperandList(mnemonic);
 		yield return new InstructionStatement(mnemonic, size, operands, token.Line, token.Column);
+	}
+
+	private IEnumerable<ParsedStatement> ParseStructDefinition(int structLine, int structColumn)
+	{
+		// The struct name must immediately follow on the same line.
+		Token nameToken = CurrentToken();
+		if (nameToken.Kind != TokenKind.Identifier || nameToken.Kind == TokenKind.NewLine)
+		{
+			throw new AssemblyException(structLine, structColumn, "STRUCT requires a name");
+		}
+		string structName = nameToken.Text.ToUpperInvariant();
+		Advance();
+
+		// Consume the rest of the STRUCT header line.
+		SkipToEndOfLine();
+
+		// Emit: <name>: EQU 0
+		yield return new LabelStatement(structName, structLine, structColumn);
+		yield return new DirectiveStatement(
+			Directive.EQU,
+			[new ImmediateOrRegisterOperand(new NumberLiteralNode(0, structLine, structColumn))],
+			structLine,
+			structColumn,
+			structName
+		);
+
+		ExpressionNode runningOffset = new NumberLiteralNode(0, structLine, structColumn);
+
+		while (true)
+		{
+			SkipNewLines();
+
+			if (AtEnd())
+			{
+				throw new AssemblyException(
+					structLine,
+					structColumn,
+					"Unterminated STRUCT definition (missing ENDSTRUCT)"
+				);
+			}
+
+			Token token = CurrentToken();
+
+			// Check for ENDSTRUCT
+			if (token.Kind == TokenKind.Identifier)
+			{
+				(string kw, _) = SplitMnemonicText(token.Text);
+				if (Keywords.TryParseDirective(kw, out Directive kd) && kd == Directive.ENDSTRUCT)
+				{
+					Advance();
+					SkipToEndOfLine();
+					break;
+				}
+			}
+
+			// Each member line must be:  .<name>: <size-expr>
+			if (token.Kind != TokenKind.Identifier || !token.Text.StartsWith('.'))
+			{
+				throw new AssemblyException(
+					token.Line,
+					token.Column,
+					$"Expected struct member (e.g. '.field: <size>') or ENDSTRUCT, got '{token.Text}'"
+				);
+			}
+
+			string memberName = token.Text[1..].ToUpperInvariant();
+			int memberLine = token.Line;
+			int memberColumn = token.Column;
+			Advance();
+
+			Token colon = CurrentToken();
+			if (colon.Kind != TokenKind.Colon)
+			{
+				throw new AssemblyException(colon.Line, colon.Column, "Expected ':' after struct member name");
+			}
+			Advance();
+
+			ExpressionNode sizeExpr = ExpressionParser.Parse(_tokens, ref _position);
+			sizeExpr = QualifyLocalReferences(sizeExpr);
+
+			string qualifiedMember = $"{structName}.{memberName}";
+
+			// Emit <name>.<member>: EQU <runningOffset>
+			yield return new LabelStatement(qualifiedMember, memberLine, memberColumn);
+			yield return new DirectiveStatement(
+				Directive.EQU,
+				[new ImmediateOrRegisterOperand(runningOffset)],
+				memberLine,
+				memberColumn,
+				qualifiedMember
+			);
+
+			runningOffset = new BinaryExpressionNode("+", runningOffset, sizeExpr, memberLine, memberColumn);
+
+			SkipToEndOfLine();
+		}
+
+		// Emit <name>._size: EQU <totalOffset>
+		string sizeLabel = $"{structName}._SIZE";
+		yield return new LabelStatement(sizeLabel, structLine, structColumn);
+		yield return new DirectiveStatement(
+			Directive.EQU,
+			[new ImmediateOrRegisterOperand(runningOffset)],
+			structLine,
+			structColumn,
+			sizeLabel
+		);
+	}
+
+	private void SkipToEndOfLine()
+	{
+		while (!AtEndOfLine())
+		{
+			Advance();
+		}
 	}
 
 	private DirectiveStatement ParseDirectiveStatement(Directive directive, int line, int column, string labelName)
@@ -199,6 +329,11 @@ public class Parser
 		while (!AtEndOfLine() && CurrentToken().Kind == TokenKind.Comma)
 		{
 			Advance();
+			SkipNewLines();
+			if (AtEnd())
+			{
+				break;
+			}
 			list.Add(ParseOperand(mnemonic, directive));
 		}
 

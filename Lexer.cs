@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace im8000asm;
 
 public enum TokenKind
@@ -109,6 +111,12 @@ public class Lexer
 			return ReadString(startLine, startColumn);
 		}
 
+		// Character literals
+		if (current == '\'')
+		{
+			return ReadCharLiteral(startLine, startColumn);
+		}
+
 		Advance();
 		return new Token(TokenKind.Identifier, current.ToString(), 0, startLine, startColumn);
 	}
@@ -174,21 +182,129 @@ public class Lexer
 		return new Token(TokenKind.Number, original, value, startLine, startColumn);
 	}
 
+	private Token ReadCharLiteral(int startLine, int startColumn)
+	{
+		Advance(); // skip opening single quote
+
+		if (_position >= _source.Length || CurrentChar() is '\n' or '\r')
+		{
+			throw new AssemblyException(startLine, startColumn, "Unterminated character literal");
+		}
+
+		ulong value;
+		string rawText;
+
+		if (CurrentChar() == '\\')
+		{
+			int escStart = _position;
+			Advance(); // skip backslash
+			value = ReadEscapeSequence(startLine, startColumn);
+			rawText = _source[escStart.._position];
+		}
+		else
+		{
+			rawText = CurrentChar().ToString();
+			value = CurrentChar();
+			Advance();
+		}
+
+		if (_position >= _source.Length || CurrentChar() != '\'')
+		{
+			throw new AssemblyException(startLine, startColumn, "Expected closing \"'\" after character literal");
+		}
+		Advance(); // skip closing single quote
+
+		return new Token(TokenKind.Number, $"'{rawText}'", value, startLine, startColumn);
+	}
+
+	private ulong ReadEscapeSequence(int startLine, int startColumn)
+	{
+		if (_position >= _source.Length)
+		{
+			throw new AssemblyException(startLine, startColumn, "Unterminated escape sequence");
+		}
+
+		char code = CurrentChar();
+		Advance();
+
+		switch (code)
+		{
+			case '\\': return '\\';
+			case '\'': return '\'';
+			case '"': return '"';
+			case '0': return '\0';
+			case 'n': return '\n';
+			case 'r': return '\r';
+			case 't': return '\t';
+
+			case 'x':
+			{
+				// \xHH - exactly two hex digits
+				if ((_position + 1) >= _source.Length || !IsHexDigit(CurrentChar()) || !IsHexDigit(Peek(1)))
+				{
+					throw new AssemblyException(
+						startLine,
+						startColumn,
+						"\\x escape requires exactly two hex digits (e.g. \\x41)"
+					);
+				}
+				ulong hi = HexDigitValue(CurrentChar());
+				ulong lo = HexDigitValue(Peek(1));
+				Advance(2);
+				return (hi << 4) | lo;
+			}
+
+			default:
+				throw new AssemblyException(startLine, startColumn, $"Unknown escape sequence '\\{code}'");
+		}
+	}
+
+	private static bool IsHexDigit(char c)
+	{
+		return c is >= '0' and <= '9' or >= 'a' and <= 'f' or >= 'A' and <= 'F';
+	}
+
+	private static ulong HexDigitValue(char c)
+	{
+		return c switch
+		{
+			>= '0' and <= '9' => (ulong)(c - '0'),
+			>= 'a' and <= 'f' => (ulong)((c - 'a') + 10),
+			_ => (ulong)((c - 'A') + 10),
+		};
+	}
+
 	private Token ReadString(int startLine, int startColumn)
 	{
 		Advance(); // skip opening quote
-		int start = _position;
-		while (_position < _source.Length && CurrentChar() != '"' && CurrentChar() != '\n')
+		var sb = new StringBuilder();
+
+		while (true)
 		{
-			Advance();
+			if (_position >= _source.Length || CurrentChar() is '\n' or '\r')
+			{
+				throw new AssemblyException(startLine, startColumn, "Unterminated string literal");
+			}
+
+			if (CurrentChar() == '"')
+			{
+				Advance(); // skip closing quote
+				break;
+			}
+
+			if (CurrentChar() == '\\')
+			{
+				Advance(); // skip backslash
+				sb.Append((char)ReadEscapeSequence(startLine, startColumn));
+			}
+			else
+			{
+				sb.Append(CurrentChar());
+				Advance();
+			}
 		}
-		string content = _source[start.._position];
-		if (_position >= _source.Length || CurrentChar() != '"')
-		{
-			throw new AssemblyException(startLine, startColumn, "Unterminated string literal");
-		}
-		Advance(); // skip closing quote
-		return new Token(TokenKind.StringLiteral, content, 0, startLine, startColumn);
+
+		return new Token(TokenKind.StringLiteral, sb.ToString(), 0, startLine, startColumn);
 	}
 
 	private void SkipWhitespaceAndComments()
