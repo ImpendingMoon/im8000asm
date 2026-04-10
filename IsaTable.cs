@@ -6,28 +6,29 @@ public static class IsaTable
 {
 	public static readonly IReadOnlyDictionary<string, InstructionDefinition> Instructions = BuildTable(
 		RAndRm(nameof(Mnemonic.LD), 0x00, 0x00),
+		LeaInstruction(),
 		ExInstruction(),
-		RAndRm(nameof(Mnemonic.ADD), 0x02, 0x02),
-		RAndRm(nameof(Mnemonic.ADC), 0x03, 0x03),
-		RAndRm(nameof(Mnemonic.SUB), 0x04, 0x04),
-		RAndRm(nameof(Mnemonic.SBC), 0x05, 0x05),
-		RAndRm(nameof(Mnemonic.CP), 0x06, 0x06),
-		RAndRm(nameof(Mnemonic.AND), 0x07, 0x07),
-		RAndRm(nameof(Mnemonic.OR), 0x08, 0x08),
-		RAndRm(nameof(Mnemonic.XOR), 0x09, 0x09),
-		RAndRm(nameof(Mnemonic.TST), 0x0A, 0x0A),
-		RAndRm(nameof(Mnemonic.BIT), 0x0B, 0x0B),
-		RAndRm(nameof(Mnemonic.SET), 0x0C, 0x0C),
-		RAndRm(nameof(Mnemonic.RES), 0x0D, 0x0D),
-		RAndRm(nameof(Mnemonic.RLC), 0x0E, 0x0E),
-		RAndRm(nameof(Mnemonic.RRC), 0x0F, 0x0F),
-		RAndRm(nameof(Mnemonic.RL), 0x10, 0x10),
-		RAndRm(nameof(Mnemonic.RR), 0x11, 0x11),
-		RAndRm(nameof(Mnemonic.SLA), 0x12, 0x12),
-		RAndRm(nameof(Mnemonic.SRA), 0x13, 0x13),
-		RAndRm(nameof(Mnemonic.SRL), 0x14, 0x14),
-		In(nameof(Mnemonic.IN), 0x15),
-		Out(nameof(Mnemonic.OUT), 0x15),
+		RAndRm(nameof(Mnemonic.ADD), 0x03, 0x03),
+		RAndRm(nameof(Mnemonic.ADC), 0x04, 0x04),
+		RAndRm(nameof(Mnemonic.SUB), 0x05, 0x05),
+		RAndRm(nameof(Mnemonic.SBC), 0x06, 0x06),
+		RAndRm(nameof(Mnemonic.CP), 0x07, 0x07),
+		RAndRm(nameof(Mnemonic.AND), 0x08, 0x08),
+		RAndRm(nameof(Mnemonic.OR), 0x09, 0x09),
+		RAndRm(nameof(Mnemonic.XOR), 0x0A, 0x0A),
+		RAndRm(nameof(Mnemonic.TST), 0x0B, 0x0B),
+		RAndRm(nameof(Mnemonic.BIT), 0x0C, 0x0C),
+		RAndRm(nameof(Mnemonic.SET), 0x0D, 0x0D),
+		RAndRm(nameof(Mnemonic.RES), 0x0E, 0x0E),
+		RAndRm(nameof(Mnemonic.RLC), 0x0F, 0x0F),
+		RAndRm(nameof(Mnemonic.RRC), 0x10, 0x10),
+		RAndRm(nameof(Mnemonic.RL), 0x11, 0x11),
+		RAndRm(nameof(Mnemonic.RR), 0x12, 0x12),
+		RAndRm(nameof(Mnemonic.SLA), 0x13, 0x13),
+		RAndRm(nameof(Mnemonic.SRA), 0x14, 0x14),
+		RAndRm(nameof(Mnemonic.SRL), 0x15, 0x15),
+		In(nameof(Mnemonic.IN), 0x16),
+		Out(nameof(Mnemonic.OUT), 0x16),
 		ExhInstruction(),
 		Ur(nameof(Mnemonic.PUSH), 0x0, 2, WideRegisterOnly),
 		Ur(nameof(Mnemonic.POP), 0x0, 3, WideRegisterOnly),
@@ -85,6 +86,21 @@ public static class IsaTable
 		SB(nameof(Mnemonic.JAZ), 0x3, true)
 	);
 
+	private static InstructionDefinition LeaInstruction()
+	{
+		return new InstructionDefinition(
+			nameof(Mnemonic.LEA),
+			[
+				new InstructionVariant(
+					InstructionFormat.FormatR,
+					0x01,
+					[WideRegisterOnly, AnyRegisterOrImmediate, LeaScale]
+				),
+				new InstructionVariant(InstructionFormat.FormatRm, 0x01, [WideRegisterOnly, Memory, LeaScale]),
+			]
+		);
+	}
+
 	private static InstructionVariant RVariant(byte opcode)
 	{
 		return new InstructionVariant(InstructionFormat.FormatR, opcode, [AnyRegister, AnyRegisterOrImmediate]);
@@ -127,8 +143,8 @@ public static class IsaTable
 		return new InstructionDefinition(
 			nameof(Mnemonic.EX),
 			[
-				RVariant(0x01),
-				..RmVariants(0x01),
+				RVariant(0x02),
+				..RmVariants(0x02),
 				new InstructionVariant(InstructionFormat.FormatUr, 0x0, [AnyRegister, AltRegister]),
 			]
 		);

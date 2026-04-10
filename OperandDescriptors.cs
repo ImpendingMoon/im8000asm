@@ -47,6 +47,8 @@ public static class OperandDescriptors
 
 	public static readonly OperandDescriptor SpecialRegisterOnly = Modes(AddressingMode.SpecialRegister);
 
+	public static readonly OperandDescriptor LeaScale = Modes(AddressingMode.Immediate);
+
 	public static readonly OperandDescriptor BranchTarget = Modes(
 		AddressingMode.NarrowRegister,
 		AddressingMode.WideRegister,

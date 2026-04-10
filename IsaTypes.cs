@@ -87,7 +87,7 @@ public enum Directive
 
 public enum Mnemonic
 {
-	LD, EX, ADD, ADC, SUB, SBC, CP, AND, OR, XOR,
+	LD, LEA, EX, ADD, ADC, SUB, SBC, CP, AND, OR, XOR,
 	TST, BIT, SET, RES, RLC, RRC, RL, RR, SLA, SRA, SRL,
 	IN, OUT,
 
