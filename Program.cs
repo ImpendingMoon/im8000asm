@@ -81,6 +81,7 @@ internal static class Program
 		{
 			string[] lines = Array.ConvertAll(sourceMap, sourceLine => sourceLine.Text);
 			List<Token> tokens = new Lexer(lines).Tokenize();
+			tokens = MacroExpander.Expand(tokens);
 			List<ParsedStatement> statements = new Parser(tokens).Parse();
 			result = new CodeGenerator(statements).Assemble();
 		}
